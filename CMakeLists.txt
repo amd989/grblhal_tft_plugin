@@ -1,15 +1,26 @@
-# TFT Touchscreen Plugin for grblHAL
-add_library(tft INTERFACE)
+# TFT Plugin Component CMakeLists.txt
+# This makes the TFT plugin a sub-component of main
 
-target_sources(tft INTERFACE
-    ${CMAKE_CURRENT_LIST_DIR}/tft_plugin.c
-    ${CMAKE_CURRENT_LIST_DIR}/tft_interface.c
-    # Add more files as you create them:
-    # ${CMAKE_CURRENT_LIST_DIR}/tft_driver.c
-    # ${CMAKE_CURRENT_LIST_DIR}/lvgl_init.c
-    # ${CMAKE_CURRENT_LIST_DIR}/tft_task.c
-    # ${CMAKE_CURRENT_LIST_DIR}/screens/screen_ready.c
-    # ${CMAKE_CURRENT_LIST_DIR}/screens/screen_control.c
+# Collect all LVGL v6 source files
+file(GLOB_RECURSE LVGL_SOURCES "lib/lvgl/src/*.c")
+
+# TFT plugin sources
+set(COMPONENT_SRCS
+    "tft_plugin.c"
+    "tft_interface.c"
+    "tft_driver.cpp"
+    "lvgl_init.c"
+    "lib/TFT_eSPI/TFT_eSPI.cpp"
+    ${LVGL_SOURCES}
 )
 
-target_include_directories(tft INTERFACE ${CMAKE_CURRENT_LIST_DIR})
+# Include directories
+set(COMPONENT_ADD_INCLUDEDIRS
+    "."
+    "lib/lvgl"
+    "lib/TFT_eSPI"
+)
+
+# Make this available to parent
+set(TFT_SRCS ${COMPONENT_SRCS} PARENT_SCOPE)
+set(TFT_INCLUDES ${COMPONENT_ADD_INCLUDEDIRS} PARENT_SCOPE)

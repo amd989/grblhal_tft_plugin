@@ -31,72 +31,60 @@ git submodule add https://github.com/amd989/grblhal_tft_plugin.git tft
 git submodule update --init --recursive
 ```
 
-### Step 2: Enable Plugin
+### Step 2: Hook it into the build
 
-Edit `grblhal/main/my_machine.h` and add:
+Create `3rdParty.cmake` in the root of the grblHAL ESP32 project (next to `platformio.ini`):
 
-```c
-// Enable TFT plugin
-#define TFT_ENABLE 1
-
-// TFT Configuration
-#define TFT_DRIVER ST7796
-#define TFT_WIDTH 480
-#define TFT_HEIGHT 320
+```cmake
+include(${CMAKE_CURRENT_LIST_DIR}/main/tft/tft_plugin.cmake)
 ```
 
-### Step 3: Build
+The driver's `main/CMakeLists.txt` already includes this file if it exists. `tft_plugin.cmake` adds the plugin, LVGL and TFT_eSPI sources and takes over grblHAL's `my_plugin_init()` hook, so neither the driver nor the core needs editing.
+
+If you already have your own `main/my_plugin.c`, the hook is left alone. Call `tft_plugin_init()` from your `my_plugin_init()` instead.
+
+### Step 3: Enable Plugin
+
+Edit `main/my_machine.h`:
+
+```c
+#define BOARD_MKS_DLC32_V2P0
+#define TFT_ENABLE 1
+```
+
+### Step 4: Build
 
 ```bash
-cd grblhal
-idf.py build
-# or
 pio run
 ```
 
 ## Configuration
 
-All configuration is done in `my_machine.h`:
+Defaults for the MKS DLC32 v2.0/v2.1 with the MKS TS35 display live in `tft_config.h`. Override any of them by defining it in `my_machine.h`, for example:
 
 ```c
-// Display settings
-#define TFT_ENABLE 1
-#define TFT_WIDTH 480
-#define TFT_HEIGHT 320
-#define TFT_ROTATION 1  // 0-3
-
-// LVGL settings
-#define LVGL_BUFFER_SIZE (10 * 480)
-#define LVGL_REFRESH_PERIOD 5  // ms
-
-// Features
-#define TFT_BEEP_ENABLE 1
-#define TFT_LED_ENABLE 1
-#define TFT_LANGUAGE_DEFAULT 1  // 0=Chinese, 1=English, 2=German
+#define TFT_ROTATION 3          // 0-3
+#define TFT_BL_PIN 5            // Backlight enable
+#define LVGL_REFRESH_PERIOD 10  // ms
 ```
+
+See `tft_config.h` for the full list (pins, SPI frequencies, backlight PWM, LVGL buffer).
 
 ## Architecture
 
 ```
 main/tft/
 ├── tft_plugin.c          # Plugin entry point and event handlers
-├── tft_plugin.h          # Plugin API
-├── tft_interface.c       # Communication with grblHAL
-├── tft_interface.h
-├── tft_task.c            # FreeRTOS UI task
-├── tft_task.h
-├── tft_driver.c          # TFT_eSPI wrapper
-├── tft_driver.h
-├── lvgl_init.c           # LVGL initialization
-├── lvgl_init.h
-├── screens/              # UI screens
-│   ├── screen_ready.c
-│   ├── screen_control.c
-│   ├── screen_job.c
-│   ├── screen_settings.c
-│   └── screen_wifi.c
-├── CMakeLists.txt        # Build configuration
-└── README.md
+├── tft_my_plugin.c       # my_plugin_init() hook, calls tft_plugin_init()
+├── tft_plugin.cmake      # Build glue, included from 3rdParty.cmake
+├── tft_config.h          # Pins and settings (defaults, override in my_machine.h)
+├── tft_interface.c/.h    # Communication with grblHAL
+├── tft_driver.cpp/.h     # TFT_eSPI wrapper
+├── lvgl_init.cpp/.h      # LVGL initialization
+├── ui_state.c/.h         # Cached machine state for the UI
+├── ui_screen_manager.c/.h# Screen registration and switching
+├── ui_widgets.c/.h       # Reusable LVGL widgets
+└── lib/                  # LVGL v6.1.2 and TFT_eSPI submodules
 ```
 
 ## Usage
@@ -133,7 +121,7 @@ The plugin automatically receives grblHAL events:
 ### Adding a New Screen
 
 1. Create `screens/screen_myfeature.c`
-2. Add to CMakeLists.txt
+2. Add it to the source list in `tft_plugin.cmake`
 3. Create drawing function:
 
 ```c
@@ -190,7 +178,8 @@ void my_state_handler(sys_state_t state) {
 ### Plugin not loading
 
 - Check `TFT_ENABLE` is defined in `my_machine.h`
-- Check CMakeLists.txt includes tft directory
+- Check `3rdParty.cmake` exists in the project root and includes `main/tft/tft_plugin.cmake`
+- If you have your own `main/my_plugin.c`, make sure it calls `tft_plugin_init()`
 - Verify submodule is initialized: `git submodule status`
 
 ### Display shows garbage

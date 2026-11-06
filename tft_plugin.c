@@ -28,6 +28,9 @@
 #include "tft_config.h"
 #include "tft_driver.h"
 #include "lvgl_init.h"
+#include "ui_state.h"
+#include "ui_screen_manager.h"
+#include "ui_widgets.h"
 
 // Plugin metadata
 static const char *plugin_id = "grblhal_tft_ui";
@@ -40,14 +43,14 @@ static on_program_completed_ptr on_program_completed;
 static driver_reset_ptr driver_reset;
 static on_report_options_ptr on_report_options;
 
-// UI state cache
+// Legacy UI state cache (for backward compatibility with existing code)
 static struct {
     sys_state_t state;
     float mpos[N_AXIS];
     float wpos[N_AXIS];
     float feed_rate;
     uint32_t line_number;
-} ui_state = {0};
+} legacy_ui_state = {0};
 
 // Forward declarations
 static void tft_state_changed(sys_state_t state);
@@ -61,26 +64,34 @@ static void tft_ui_task(void *param);
  * Event: State changed (Idle, Run, Hold, Alarm, etc.)
  */
 static void tft_state_changed(sys_state_t state) {
-    ui_state.state = state;
+    legacy_ui_state.state = state;
 
-    // TODO: Update UI based on state
-    // switch(state) {
-    //     case STATE_IDLE:
-    //         // Show ready screen
-    //         break;
-    //     case STATE_CYCLE:
-    //         // Show job running screen
-    //         break;
-    //     case STATE_HOLD:
-    //         // Show paused status
-    //         break;
-    //     case STATE_ALARM:
-    //         // Show alarm screen
-    //         break;
-    //     case STATE_HOMING:
-    //         // Show homing status
-    //         break;
-    // }
+    // Update foundation UI state
+    ui_state_update_system_state(state);
+
+    // Screen transitions based on state
+    switch(state) {
+        case STATE_IDLE:
+            if(ui_state_get_screen() == SCREEN_JOB) {
+                // Job completed, return to main screen
+                ui_screen_manager_show(SCREEN_MAIN);
+            }
+            break;
+        case STATE_CYCLE:
+            // Auto-switch to job screen when running
+            if(ui_state_get_screen() != SCREEN_JOB) {
+                ui_screen_manager_show(SCREEN_JOB);
+            }
+            break;
+        case STATE_ALARM:
+            // Show alarm on current screen (status bar will show red)
+            break;
+        case STATE_HOMING:
+            // Show homing status (status bar will update)
+            break;
+        default:
+            break;
+    }
 
     // Chain to previous handler
     if(on_state_change)
@@ -92,20 +103,20 @@ static void tft_state_changed(sys_state_t state) {
  */
 static void tft_realtime_report(stream_write_ptr stream_write, report_tracking_flags_t report) {
     // Get current machine position
-    system_convert_array_steps_to_mpos(ui_state.mpos, sys.position);
+    system_convert_array_steps_to_mpos(legacy_ui_state.mpos, sys.position);
 
     // Get work position (accounting for work coordinate system)
     // In grblHAL, coordinate offsets are in gc_state.modal
     for(int i = 0; i < N_AXIS; i++) {
-        ui_state.wpos[i] = ui_state.mpos[i] - gc_state.modal.coord_system.xyz[i];
+        legacy_ui_state.wpos[i] = legacy_ui_state.mpos[i] - gc_state.modal.coord_system.xyz[i];
     }
 
     // Get current feed rate
-    ui_state.feed_rate = st_get_realtime_rate();
+    legacy_ui_state.feed_rate = st_get_realtime_rate();
 
-    // TODO: Update UI with position and feed rate
-    // ui_update_position(ui_state.mpos, ui_state.wpos);
-    // ui_update_feed_rate(ui_state.feed_rate);
+    // Update foundation UI state with position data
+    ui_state_update_position(legacy_ui_state.wpos, legacy_ui_state.mpos);
+    ui_state_update_feed_spindle(legacy_ui_state.feed_rate, 0.0f);  // Spindle speed will be added later
 
     // Chain to previous handler
     if(on_realtime_report)
@@ -130,11 +141,14 @@ static void tft_program_completed(program_flow_t program_flow, bool check_mode) 
  * Event: System reset
  */
 static void tft_reset(void) {
-    // Reset UI state
-    memset(&ui_state, 0, sizeof(ui_state));
+    // Reset legacy UI state
+    memset(&legacy_ui_state, 0, sizeof(legacy_ui_state));
 
-    // TODO: Reset UI to ready screen
-    // ui_show_screen(SCREEN_READY);
+    // Reset foundation UI state
+    ui_state_init();
+
+    // Return to main screen
+    ui_screen_manager_show(SCREEN_MAIN);
 
     // Chain to previous handler
     if(driver_reset)
@@ -161,21 +175,27 @@ static void tft_ui_task(void *param) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     const TickType_t xFrequency = pdMS_TO_TICKS(TFT_LVGL_REFRESH_MS);
 
+    // Initialize foundation components
+    ui_state_init();
+    ui_screen_manager_init();
+    ui_widgets_init();
+
     // Breathing effect during startup (2 seconds)
     uint32_t splash_count = 0;
     const uint32_t splash_duration = TFT_SPLASH_DURATION_MS / TFT_LVGL_REFRESH_MS;  // 400 iterations
     const uint32_t backlight_on_count = TFT_SPLASH_BACKLIGHT_DELAY_MS / TFT_LVGL_REFRESH_MS;  // 100 iterations
 
-    // Create "Hello World" label
+    // Create splash screen label
     lv_obj_t *label = lv_label_create(lv_scr_act(), NULL);
-    lv_label_set_text(label, "grblHAL TFT Ready!\n\nPhase 2 Complete");
+    lv_label_set_text(label, "grblHAL TFT\n\nPhase 3 Foundation\n\nReady!");
     lv_obj_align(label, NULL, LV_ALIGN_CENTER, 0, 0);
 
-    // Set larger font if available
-    static lv_style_t style;
-    lv_style_copy(&style, &lv_style_plain);
-    style.text.font = &lv_font_roboto_28;
-    lv_obj_set_style(label, &style);
+    // Set larger font
+    static lv_style_t splash_style;
+    lv_style_copy(&splash_style, &lv_style_plain);
+    splash_style.text.font = &lv_font_roboto_28;
+    splash_style.text.color = UI_COLOR_PRIMARY;
+    lv_obj_set_style(label, &splash_style);
 
     // Main UI loop
     while(1) {
@@ -188,7 +208,15 @@ static void tft_ui_task(void *param) {
             if(splash_count == backlight_on_count) {
                 tft_backlight_on(255);  // Full brightness
             }
+
+            // After splash, show main screen
+            if(splash_count == splash_duration - 1) {
+                ui_screen_manager_show(SCREEN_MAIN);
+            }
         }
+
+        // Update screen manager (calls current screen's update callback)
+        ui_screen_manager_update();
 
         // Process LVGL tasks (event handling, animations, updates)
         lvgl_task_handler();

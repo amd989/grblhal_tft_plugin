@@ -152,11 +152,17 @@ static inline char* ltoa(long value, char* result, int base) {
 // Arduino PWM functions (using ESP-IDF LEDC driver)
 #include "driver/ledc.h"
 
+// Arduino numbers LEDC channels 0-15: 0-7 are high speed, 8-15 low speed, and
+// each pair of channels shares a timer. ESP-IDF wants mode + channel 0-7.
+#define LEDC_ARDUINO_MODE(ch)    ((ch) < 8 ? LEDC_HIGH_SPEED_MODE : LEDC_LOW_SPEED_MODE)
+#define LEDC_ARDUINO_CHANNEL(ch) ((ledc_channel_t)((ch) % 8))
+#define LEDC_ARDUINO_TIMER(ch)   ((ledc_timer_t)(((ch) / 2) % 4))
+
 static inline void ledcSetup(uint8_t channel, uint32_t freq, uint8_t resolution_bits) {
     ledc_timer_config_t ledc_timer = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .speed_mode = LEDC_ARDUINO_MODE(channel),
         .duty_resolution = (ledc_timer_bit_t)resolution_bits,
-        .timer_num = LEDC_TIMER_0,
+        .timer_num = LEDC_ARDUINO_TIMER(channel),
         .freq_hz = freq,
         .clk_cfg = LEDC_AUTO_CLK
     };
@@ -166,10 +172,10 @@ static inline void ledcSetup(uint8_t channel, uint32_t freq, uint8_t resolution_
 static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
     ledc_channel_config_t ledc_channel = {
         .gpio_num = pin,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel = (ledc_channel_t)channel,
+        .speed_mode = LEDC_ARDUINO_MODE(channel),
+        .channel = LEDC_ARDUINO_CHANNEL(channel),
         .intr_type = LEDC_INTR_DISABLE,
-        .timer_sel = LEDC_TIMER_0,
+        .timer_sel = LEDC_ARDUINO_TIMER(channel),
         .duty = 0,
         .hpoint = 0
     };
@@ -177,19 +183,27 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
 }
 
 static inline void ledcWrite(uint8_t channel, uint32_t duty) {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)channel, duty);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)channel);
+    ledc_set_duty(LEDC_ARDUINO_MODE(channel), LEDC_ARDUINO_CHANNEL(channel), duty);
+    ledc_update_duty(LEDC_ARDUINO_MODE(channel), LEDC_ARDUINO_CHANNEL(channel));
 }
 
-// SPI class stub (TFT_eSPI will use its own SPI handling)
+// Minimal Arduino SPIClass on top of the ESP-IDF spi_master driver.
+// TFT_eSPI builds with its Generic processor here (ESP-IDF does not define
+// Arduino's ESP32 macro), which only needs begin(), setFrequency(),
+// transfer() and transfer16(). See arduino_spi.cpp.
 class SPIClass {
 public:
-    void begin() {}
+    void begin(int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1, int8_t ss = -1);
+    void end(void);
+    void setFrequency(uint32_t freq);
     void beginTransaction(void*) {}
     void endTransaction() {}
-    uint8_t transfer(uint8_t data) { return 0; }
-    uint16_t transfer16(uint16_t data) { return 0; }
-    void setFrequency(uint32_t freq) {}
+    uint8_t transfer(uint8_t data);
+    uint16_t transfer16(uint16_t data);
+private:
+    spi_device_handle_t dev = NULL;
+    uint32_t freq_hz = 0;
+    bool add_device(void);
 };
 
 extern SPIClass SPI;

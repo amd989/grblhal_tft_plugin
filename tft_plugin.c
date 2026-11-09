@@ -16,6 +16,10 @@
 
 #if TFT_ENABLE
 
+#if defined(BOARD_MKS_DLC32_V2P0)
+#error "TFT plugin: the stock MKS DLC32 map gives the LCD pins to grblHAL. Use BOARD_MY_MACHINE with tft/boards/mks_dlc32_2_0_tft_map.h, see the plugin README."
+#endif
+
 #include <string.h>
 #include <lvgl.h>
 #include "grbl/hal.h"
@@ -211,6 +215,7 @@ static void tft_ui_task(void *param) {
 
             // After splash, show main screen
             if(splash_count == splash_duration - 1) {
+                tft_backlight_on(255);  // Breathing can stop at any level
                 ui_screen_manager_show(SCREEN_MAIN);
             }
         }

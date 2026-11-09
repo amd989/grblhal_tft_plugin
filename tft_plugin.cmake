@@ -17,6 +17,7 @@ list(APPEND SRCS
     ${TFT_PLUGIN_DIR}/tft_interface.c
     ${TFT_PLUGIN_DIR}/tft_driver.cpp
     ${TFT_PLUGIN_DIR}/lvgl_init.cpp
+    ${TFT_PLUGIN_DIR}/arduino_spi.cpp
     ${TFT_PLUGIN_DIR}/ui_state.c
     ${TFT_PLUGIN_DIR}/ui_screen_manager.c
     ${TFT_PLUGIN_DIR}/ui_widgets.c

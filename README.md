@@ -43,16 +43,28 @@ The driver's `main/CMakeLists.txt` already includes this file if it exists. `tft
 
 If you already have your own `main/my_plugin.c`, the hook is left alone. Call `tft_plugin_init()` from your `my_plugin_init()` instead.
 
-### Step 3: Enable Plugin
+### Step 3: Select the board map
+
+The stock `BOARD_MKS_DLC32_V2P0` map gives the LCD header pins to grblHAL (aux outputs, spindle enable on the LCD reset line, an aux input on LCD data/command), which keeps the display dark. The plugin ships a DLC32 map that leaves them to the display. Create `main/boards/my_machine_map.h`:
+
+```c
+#include "tft/boards/mks_dlc32_2_0_tft_map.h"
+```
+
+Differences from the stock map: the laser PWM stays on GPIO 32, there is no flood coolant output (it was on the backlight pin), no second spindle and no UART1. The board has no spindle enable or direction output, so grblHAL's are parked on unwired shift register bits.
+
+### Step 4: Enable Plugin
 
 Edit `main/my_machine.h`:
 
 ```c
-#define BOARD_MKS_DLC32_V2P0
+#define BOARD_MY_MACHINE
 #define TFT_ENABLE 1
 ```
 
-### Step 4: Build
+The build stops with an error if `TFT_ENABLE` is used with the stock `BOARD_MKS_DLC32_V2P0` map.
+
+### Step 5: Build
 
 ```bash
 pio run
@@ -78,6 +90,9 @@ main/tft/
 ├── tft_my_plugin.c       # my_plugin_init() hook, calls tft_plugin_init()
 ├── tft_plugin.cmake      # Build glue, included from 3rdParty.cmake
 ├── tft_config.h          # Pins and settings (defaults, override in my_machine.h)
+├── arduino_compat.h      # Arduino API shim for TFT_eSPI on ESP-IDF
+├── arduino_spi.cpp       # SPIClass on the ESP-IDF spi_master driver
+├── boards/               # Board maps that keep the LCD pins free
 ├── tft_interface.c/.h    # Communication with grblHAL
 ├── tft_driver.cpp/.h     # TFT_eSPI wrapper
 ├── lvgl_init.cpp/.h      # LVGL initialization

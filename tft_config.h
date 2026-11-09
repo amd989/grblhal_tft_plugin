@@ -149,7 +149,7 @@ extern "C" {
 #define TFT_BACKLIGHT_MAX       ((1 << TFT_BACKLIGHT_BITS) - 1)  // 1023 for 10-bit
 
 // Backlight polarity (board-specific)
-#ifdef USE_BOARD_V2_0
+#if USE_BOARD_V2_0
     #define TFT_BACKLIGHT_ON(duty)  ledcWrite(TFT_BACKLIGHT_CHANNEL, TFT_BACKLIGHT_MAX - (duty))
     #define TFT_BACKLIGHT_OFF()     ledcWrite(TFT_BACKLIGHT_CHANNEL, TFT_BACKLIGHT_MAX)
 #else

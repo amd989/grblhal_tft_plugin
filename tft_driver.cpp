@@ -65,7 +65,7 @@ void tft_set_backlight(uint8_t level) {
     // Map 0-255 to PWM duty cycle
     uint32_t duty = (uint32_t)level * TFT_BACKLIGHT_MAX / 255;
 
-#ifdef USE_BOARD_V2_0
+#if USE_BOARD_V2_0
     // V2.0 boards: backlight is active LOW
     duty = TFT_BACKLIGHT_MAX - duty;
 #endif

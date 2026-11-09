@@ -11,13 +11,33 @@
 #define _TFT_INTERFACE_H_
 
 #include "grbl/system.h"
+#include "grbl/settings.h"
+#include "tft_config.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
- * Command Injection - Send G-code commands to grblHAL
+ * Setup - creates the command queue and hooks grblHAL's foreground loop.
+ * Call once from plugin init.
+ */
+void tft_interface_init(void);
+
+/*
+ * Debug log - safe from any task. Lines are printed as [MSG:TFT ...] from
+ * grblHAL's loop. Compiled out unless TFT_DEBUG is 1.
+ */
+#if TFT_DEBUG
+void tft_log(const char *fmt, ...);
+#else
+#define tft_log(...)
+#endif
+
+/*
+ * Command Injection - Send G-code commands to grblHAL.
+ * Safe to call from the UI task: lines are queued and handed to grblHAL
+ * from its own loop.
  */
 
 // Send raw G-code command
@@ -70,6 +90,9 @@ void tft_stop(void);
 
 // Soft reset
 void tft_reset(void);
+
+// Clear alarm lock ($X)
+void tft_unlock(void);
 
 /*
  * State Queries

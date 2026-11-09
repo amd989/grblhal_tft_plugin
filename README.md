@@ -99,6 +99,7 @@ main/tft/
 ├── ui_state.c/.h         # Cached machine state for the UI
 ├── ui_screen_manager.c/.h# Screen registration and switching
 ├── ui_widgets.c/.h       # Reusable LVGL widgets
+├── screens/              # Screens (screen_main: state, position, Home/Unlock/Hold/Reset)
 └── lib/                  # LVGL v6.1.2 and TFT_eSPI submodules
 ```
 
@@ -179,7 +180,7 @@ void my_state_handler(sys_state_t state) {
 2. Open serial monitor
 3. Look for: `[TFT Plugin initialized]`
 4. Send `$I` command
-5. Should see: `[PLUGIN:TFT UI v0.1]`
+5. Should see: `[PLUGIN:TFT UI v0.2]`
 
 ### Display Test
 
@@ -196,6 +197,19 @@ void my_state_handler(sys_state_t state) {
 - Check `3rdParty.cmake` exists in the project root and includes `main/tft/tft_plugin.cmake`
 - If you have your own `main/my_plugin.c`, make sure it calls `tft_plugin_init()`
 - Verify submodule is initialized: `git submodule status`
+
+### Touch or buttons not doing anything
+
+Add `#define TFT_DEBUG 1` to `my_machine.h`. Touches, button clicks and commands are then printed on the serial port as `[MSG:TFT ...]` lines, for example:
+
+```
+[MSG:TFT touch down raw x=176 y=283]
+[MSG:TFT btn unlock clicked]
+[MSG:TFT cmd queued: $X]
+[MSG:TFT cmd accepted: $X]
+```
+
+grblHAL runs commands from the screen silently (no `ok`/`error` reply). A command it cannot take within 1 second (busy, or in Hold) is dropped and logged as `cmd expired`.
 
 ### Display shows garbage
 

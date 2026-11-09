@@ -55,8 +55,9 @@
 
 #define SMOOTH_FONT  // Enable smooth font rendering
 
-#define TFT_WIDTH  480
-#define TFT_HEIGHT 320
+// Native (portrait) panel size. TFT_eSPI swaps these for landscape rotations.
+#define TFT_WIDTH  320
+#define TFT_HEIGHT 480
 
 #define TOUCH_THRESHOLD 600 // Touch detection threshold
 

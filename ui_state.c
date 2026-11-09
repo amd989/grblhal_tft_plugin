@@ -257,6 +257,12 @@ const char* ui_state_get_state_string(void) {
             return "Check";
         case STATE_TOOL_CHANGE:
             return "Tool";
+        case STATE_SAFETY_DOOR:
+            return "Door";
+        case STATE_SLEEP:
+            return "Sleep";
+        case STATE_ESTOP:
+            return "E-Stop";
         default:
             return "Unknown";
     }

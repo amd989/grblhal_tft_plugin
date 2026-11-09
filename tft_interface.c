@@ -15,30 +15,176 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+
 #include "grbl/hal.h"
 #include "grbl/state_machine.h"
 #include "grbl/system.h"
 #include "grbl/settings.h"
+#include "grbl/gcode.h"
+#include "grbl/stepper.h"
 
 #include "tft_interface.h"
+#include "ui_state.h"
+
+// How often the UI state cache is refreshed from grblHAL, in ms.
+#define TFT_POLL_INTERVAL_MS    100
+#define TFT_CMD_QUEUE_LEN       8
+#define TFT_CMD_MAX_LEN         96
+// Drop a command grblHAL has not accepted by then (busy, or in Hold), so it
+// does not run unexpectedly much later.
+#define TFT_CMD_TIMEOUT_MS      1000
+
+typedef struct {
+    uint32_t queued_at;
+    char line[TFT_CMD_MAX_LEN];
+} tft_cmd_t;
+
+static QueueHandle_t cmd_queue = NULL;
+static on_execute_realtime_ptr on_execute_realtime;
+
+#if TFT_DEBUG
+#define TFT_LOG_QUEUE_LEN       16
+#define TFT_LOG_MAX_LEN         64
+
+typedef struct {
+    char text[TFT_LOG_MAX_LEN];
+} tft_log_t;
+
+static QueueHandle_t log_queue = NULL;
+
+// Queue a debug line from any task, printed later from grblHAL's loop.
+void tft_log (const char *fmt, ...)
+{
+    tft_log_t msg;
+    va_list args;
+
+    if(!log_queue)
+        return;
+
+    va_start(args, fmt);
+    vsnprintf(msg.text, sizeof(msg.text), fmt, args);
+    va_end(args);
+
+    xQueueSend(log_queue, &msg, 0);
+}
+#endif
 
 /*
- * Command Injection
+ * Runs in grblHAL's foreground loop. This is the only place the plugin touches
+ * grblHAL state, so the UI task never calls into grblHAL directly:
+ * - snapshots state and position into the UI cache, without needing a host
+ *   to poll with '?'
+ * - hands queued UI commands to grbl.enqueue_gcode(), which only holds one
+ *   line at a time and refuses while busy, so a command stays queued until
+ *   it is accepted
+ */
+static void tft_poll (sys_state_t state)
+{
+    static uint32_t last_poll = 0;
+    uint32_t now = hal.get_elapsed_ticks();
+
+    if(now - last_poll >= TFT_POLL_INTERVAL_MS) {
+        float mpos[N_AXIS], wpos[N_AXIS];
+
+        last_poll = now;
+
+        system_convert_array_steps_to_mpos(mpos, sys.position);
+        for(uint_fast8_t idx = 0; idx < N_AXIS; idx++)
+            wpos[idx] = mpos[idx] - gc_get_offset(idx, true);
+
+        ui_state_update_position(wpos, mpos);
+        ui_state_update_system_state(state_get());
+        ui_state_set_alarm(state_get() == STATE_ALARM ? (uint16_t)sys.alarm : 0);
+        ui_state_update_feed_spindle(st_get_realtime_rate(), 0.0f);
+    }
+
+    tft_cmd_t cmd;
+
+    if(cmd_queue && xQueuePeek(cmd_queue, &cmd, 0) == pdTRUE) {
+        if(grbl.enqueue_gcode(cmd.line)) {
+            xQueueReceive(cmd_queue, &cmd, 0);
+            tft_log("cmd accepted: %s", cmd.line);
+        } else if(now - cmd.queued_at > TFT_CMD_TIMEOUT_MS) {
+            xQueueReceive(cmd_queue, &cmd, 0);
+            tft_log("cmd expired: %s", cmd.line);
+        }
+    }
+
+#if TFT_DEBUG
+    static bool announced = false;
+    tft_log_t msg;
+
+    if(!announced) {
+        announced = true;
+        hal.stream.write("[MSG:TFT poll running]" ASCII_EOL);
+    }
+
+    while(log_queue && xQueueReceive(log_queue, &msg, 0) == pdTRUE) {
+        hal.stream.write("[MSG:TFT ");
+        hal.stream.write(msg.text);
+        hal.stream.write("]" ASCII_EOL);
+    }
+#endif
+
+    on_execute_realtime(state);
+}
+
+void tft_interface_init (void)
+{
+    cmd_queue = xQueueCreate(TFT_CMD_QUEUE_LEN, sizeof(tft_cmd_t));
+#if TFT_DEBUG
+    log_queue = xQueueCreate(TFT_LOG_QUEUE_LEN, sizeof(tft_log_t));
+#endif
+
+    on_execute_realtime = grbl.on_execute_realtime;
+    grbl.on_execute_realtime = tft_poll;
+}
+
+// Realtime commands (hold, resume, reset) are ISR safe in grblHAL.
+static void send_rt (char c)
+{
+    bool ok = grbl.enqueue_realtime_command(c);
+    tft_log("rt 0x%02X %s", (unsigned)(uint8_t)c, ok ? "sent" : "refused");
+    (void)ok;
+}
+
+/*
+ * Command Injection - safe to call from the UI task.
+ * Lines are queued and passed to grblHAL from its own loop.
  */
 
 void tft_send_command(const char *cmd) {
-    hal.stream.write(cmd);
+    tft_cmd_t c;
+
+    if(!cmd_queue || !cmd)
+        return;
+
+    strncpy(c.line, cmd, sizeof(c.line) - 1);
+    c.line[sizeof(c.line) - 1] = '\0';
+
+    // grblHAL takes a single line without terminator
+    char *eol = strpbrk(c.line, "\r\n");
+    if(eol)
+        *eol = '\0';
+
+    if(*c.line) {
+        c.queued_at = hal.get_elapsed_ticks();
+        bool queued = xQueueSend(cmd_queue, &c, 0) == pdTRUE;
+        tft_log("cmd %s: %s", queued ? "queued" : "DROPPED", c.line);
+    }
 }
 
 void tft_send_command_fmt(const char *fmt, ...) {
-    char buffer[128];
+    char buffer[TFT_CMD_MAX_LEN];
     va_list args;
 
     va_start(args, fmt);
     vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
 
-    hal.stream.write(buffer);
+    tft_send_command(buffer);
 }
 
 /*
@@ -54,7 +200,7 @@ void tft_jog_axis(uint8_t axis, float distance, float speed) {
 }
 
 void tft_jog_cancel(void) {
-    hal.stream.enqueue_rt_command(CMD_JOG_CANCEL);
+    send_rt(CMD_JOG_CANCEL);
 }
 
 void tft_home_all(void) {
@@ -108,19 +254,23 @@ void tft_set_axis_value(uint8_t axis, float value) {
  */
 
 void tft_feed_hold(void) {
-    hal.stream.enqueue_rt_command(CMD_FEED_HOLD);
+    send_rt(CMD_FEED_HOLD);
 }
 
 void tft_cycle_start(void) {
-    hal.stream.enqueue_rt_command(CMD_CYCLE_START);
+    send_rt(CMD_CYCLE_START);
 }
 
 void tft_stop(void) {
-    hal.stream.enqueue_rt_command(CMD_STOP);
+    send_rt(CMD_STOP);
 }
 
 void tft_reset(void) {
-    hal.stream.enqueue_rt_command(CMD_RESET);
+    send_rt(CMD_RESET);
+}
+
+void tft_unlock(void) {
+    tft_send_command("$X");
 }
 
 /*

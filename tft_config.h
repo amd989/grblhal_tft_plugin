@@ -20,11 +20,13 @@
 // ---------------------------------------------------------------------------
 
 // Display
-#ifndef TFT_WIDTH
-#define TFT_WIDTH               480
+// Landscape size as used by LVGL. TFT_WIDTH/TFT_HEIGHT in User_Setup.h are
+// the panel's native portrait size, as TFT_eSPI expects.
+#ifndef TFT_DISPLAY_WIDTH
+#define TFT_DISPLAY_WIDTH       480
 #endif
-#ifndef TFT_HEIGHT
-#define TFT_HEIGHT              320
+#ifndef TFT_DISPLAY_HEIGHT
+#define TFT_DISPLAY_HEIGHT      320
 #endif
 #ifndef TFT_ROTATION
 #define TFT_ROTATION            1       // 0-3
@@ -47,6 +49,11 @@
 #endif
 #ifndef TFT_LANGUAGE_DEFAULT
 #define TFT_LANGUAGE_DEFAULT    1       // 0=Chinese, 1=English, 2=German
+#endif
+
+// Debug log of touches, button clicks and commands, printed as [MSG:TFT ...]
+#ifndef TFT_DEBUG
+#define TFT_DEBUG               0
 #endif
 
 // Board revision: v2.0/v2.1 backlight is active low
@@ -115,8 +122,6 @@ extern "C" {
 #endif
 
 // Display Specifications
-#define TFT_DISPLAY_WIDTH       TFT_WIDTH       // 480 pixels
-#define TFT_DISPLAY_HEIGHT      TFT_HEIGHT      // 320 pixels
 #define TFT_DISPLAY_ROTATION    TFT_ROTATION    // 1 = landscape
 
 // LVGL Buffer Configuration
@@ -166,10 +171,13 @@ extern "C" {
 // Touch Controller: XPT2046
 #define TFT_TOUCH_XPT2046       1
 
-// Touch Coordinate Transformation
-// (MKS TS35 requires mirrored X and Y axes)
-#define TFT_TOUCH_MIRROR_X      1
-#define TFT_TOUCH_MIRROR_Y      1
+// Touch Coordinate Transformation (TS35 needs none)
+#ifndef TFT_TOUCH_MIRROR_X
+#define TFT_TOUCH_MIRROR_X      0
+#endif
+#ifndef TFT_TOUCH_MIRROR_Y
+#define TFT_TOUCH_MIRROR_Y      0
+#endif
 
 // Color Depth
 #define TFT_COLOR_DEPTH         16      // RGB565

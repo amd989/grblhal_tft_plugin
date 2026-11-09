@@ -19,6 +19,10 @@
 // External TFT_eSPI instance (from tft_driver.c)
 extern TFT_eSPI tft;
 
+#if TFT_DEBUG
+extern "C" void tft_log(const char *fmt, ...);  // tft_interface.c
+#endif
+
 // LVGL display buffer
 static lv_disp_buf_t disp_buf;
 static lv_color_t bmp_public_buf[TFT_LVGL_BUFFER_SIZE];
@@ -90,26 +94,38 @@ static bool lvgl_touch_read(lv_indev_drv_t *indev, lv_indev_data_t *data) {
     static uint16_t last_x = 0;
     static uint16_t last_y = 0;
 
-    // Read touch from TFT_eSPI (handles XPT2046 protocol)
-    boolean touched = tft.getTouch(&touchY, &touchX);
+    // Read touch from TFT_eSPI (handles XPT2046 protocol). It returns screen
+    // coordinates for the current rotation, given native panel size in User_Setup.h.
+    boolean touched = tft.getTouch(&touchX, &touchY);
+
+#if TFT_DEBUG
+    static bool was_touched = false;
+    if(touched != was_touched) {
+        was_touched = touched;
+        if(touched)
+            tft_log("touch down raw x=%u y=%u", touchX, touchY);
+        else
+            tft_log("touch up at x=%u y=%u", last_x, last_y);
+    }
+#endif
 
     if(touched) {
         // Boundary clamping
-        if(touchX > TFT_DISPLAY_WIDTH) {
-            touchX = TFT_DISPLAY_WIDTH;
+        if(touchX >= TFT_DISPLAY_WIDTH) {
+            touchX = TFT_DISPLAY_WIDTH - 1;
         }
-        if(touchY > TFT_DISPLAY_HEIGHT) {
-            touchY = TFT_DISPLAY_HEIGHT;
+        if(touchY >= TFT_DISPLAY_HEIGHT) {
+            touchY = TFT_DISPLAY_HEIGHT - 1;
         }
 
 #if TFT_TOUCH_MIRROR_X
-        // Mirror X-axis (required for MKS TS35)
-        touchX = TFT_DISPLAY_WIDTH - touchX;
+        // Mirror X-axis
+        touchX = TFT_DISPLAY_WIDTH - 1 - touchX;
 #endif
 
 #if TFT_TOUCH_MIRROR_Y
-        // Mirror Y-axis (required for MKS TS35)
-        touchY = TFT_DISPLAY_HEIGHT - touchY;
+        // Mirror Y-axis
+        touchY = TFT_DISPLAY_HEIGHT - 1 - touchY;
 #endif
 
         // Update last known position

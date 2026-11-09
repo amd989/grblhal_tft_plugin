@@ -21,6 +21,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <stddef.h>
 #include <lvgl.h>
 #include "ui_state.h"
 
@@ -195,6 +196,35 @@ lv_obj_t* ui_widget_create_icon_button(lv_obj_t *parent, lv_coord_t x, lv_coord_
  */
 lv_obj_t* ui_widget_create_container(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
                                       lv_coord_t width, lv_coord_t height);
+
+/*
+ * Change a button's color style after creation (e.g. to highlight a selection)
+ */
+void ui_widget_set_button_style(lv_obj_t *btn, ui_button_style_t style);
+
+/*
+ * Dark full-screen background style for screen containers
+ */
+lv_style_t *ui_widget_screen_style(void);
+
+/*
+ * Label with an existing (shared, static) style
+ */
+lv_obj_t *ui_widget_create_styled_label(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
+                                        lv_style_t *style, const char *text);
+
+/*
+ * Set label text only if it differs from shown (the last text set), which
+ * avoids redrawing unchanged labels. shown must hold size chars.
+ */
+void ui_widget_set_text(lv_obj_t *label, char *shown, size_t size, const char *text);
+
+/*
+ * Machine state label helpers shared by screens: text such as "Idle" or
+ * "ALARM 9", and a large font style colored by state
+ */
+void ui_widget_format_state(char *buf, size_t size);
+lv_style_t *ui_widget_state_style(sys_state_t state);
 
 #ifdef __cplusplus
 }

@@ -17,6 +17,9 @@
 // The MKS DLC32 LCD header is wired to the VSPI IO_MUX pins (18/19/23).
 #define TFT_SPI_HOST SPI3_HOST  // VSPI
 
+// Largest single DMA transfer; writeBytes() splits longer blocks.
+#define TFT_SPI_MAX_TRANSFER 8192
+
 SPIClass SPI;
 
 void SPIClass::begin(int8_t sck, int8_t miso, int8_t mosi, int8_t ss)
@@ -32,9 +35,10 @@ void SPIClass::begin(int8_t sck, int8_t miso, int8_t mosi, int8_t ss)
     bus.mosi_io_num = mosi >= 0 ? mosi : TFT_MOSI;
     bus.quadwp_io_num = -1;
     bus.quadhd_io_num = -1;
-    bus.max_transfer_sz = 4;
+    bus.max_transfer_sz = TFT_SPI_MAX_TRANSFER;
 
-    if(spi_bus_initialize(TFT_SPI_HOST, &bus, 0) != ESP_OK)
+    // DMA for writeBytes(); single bytes and words still go via tx_data
+    if(spi_bus_initialize(TFT_SPI_HOST, &bus, SPI_DMA_CH_AUTO) != ESP_OK)
         return;
 
     if(freq_hz == 0)
@@ -85,6 +89,23 @@ void SPIClass::setFrequency(uint32_t freq)
         spi_bus_remove_device(dev);
         dev = NULL;
         add_device();
+    }
+}
+
+// Write a block (write only). data must be DMA capable, i.e. in internal RAM.
+void SPIClass::writeBytes(const uint8_t *data, uint32_t len)
+{
+    if(!dev)
+        return;
+
+    while(len) {
+        uint32_t chunk = len > TFT_SPI_MAX_TRANSFER ? TFT_SPI_MAX_TRANSFER : len;
+        spi_transaction_t t = {};
+        t.length = chunk * 8;
+        t.tx_buffer = data;
+        spi_device_polling_transmit(dev, &t);
+        data += chunk;
+        len -= chunk;
     }
 }
 

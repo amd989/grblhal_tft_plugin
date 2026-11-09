@@ -22,6 +22,7 @@ list(APPEND SRCS
     ${TFT_PLUGIN_DIR}/ui_screen_manager.c
     ${TFT_PLUGIN_DIR}/ui_widgets.c
     ${TFT_PLUGIN_DIR}/screens/screen_main.c
+    ${TFT_PLUGIN_DIR}/screens/screen_jog.c
     ${TFT_PLUGIN_DIR}/lib/TFT_eSPI/TFT_eSPI.cpp
     ${TFT_LVGL_SOURCES}
 )

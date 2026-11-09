@@ -51,6 +51,14 @@
 #define TFT_LANGUAGE_DEFAULT    1       // 0=Chinese, 1=English, 2=German
 #endif
 
+// Jog feed rates, mm/min
+#ifndef TFT_JOG_FEED
+#define TFT_JOG_FEED            1000
+#endif
+#ifndef TFT_JOG_FEED_Z
+#define TFT_JOG_FEED_Z          300
+#endif
+
 // Debug log of touches, button clicks and commands, printed as [MSG:TFT ...]
 #ifndef TFT_DEBUG
 #define TFT_DEBUG               0

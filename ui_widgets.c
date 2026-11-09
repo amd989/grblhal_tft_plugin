@@ -19,6 +19,15 @@ static lv_style_t style_btn_primary_pr;
 static lv_style_t style_btn_success_rel;
 static lv_style_t style_btn_danger_rel;
 
+// Screen background
+static lv_style_t style_screen;
+
+// Machine state label styles
+static lv_style_t style_state_idle;
+static lv_style_t style_state_run;
+static lv_style_t style_state_warn;
+static lv_style_t style_state_alarm;
+
 // Status bar components (stored for updates) - global storage for LVGL v6
 typedef struct {
     lv_obj_t *state_label;
@@ -80,21 +89,28 @@ void ui_widgets_init(void) {
     style_btn_danger_rel.body.main_color = UI_COLOR_DANGER;
     style_btn_danger_rel.body.grad_color = UI_COLOR_DANGER;
     style_btn_danger_rel.body.border.color = UI_COLOR_DANGER;
+
+    // Screen background
+    lv_style_copy(&style_screen, &lv_style_plain);
+    style_screen.body.main_color = UI_COLOR_BACKGROUND;
+    style_screen.body.grad_color = UI_COLOR_BACKGROUND;
+    style_screen.body.border.width = 0;
+    style_screen.body.radius = 0;
+    style_screen.text.color = UI_COLOR_TEXT;
+
+    // Machine state label styles
+    lv_style_copy(&style_state_idle, &lv_style_plain);
+    style_state_idle.text.font = UI_FONT_XLARGE;
+    style_state_idle.text.color = UI_COLOR_SUCCESS;
+    lv_style_copy(&style_state_run, &style_state_idle);
+    style_state_run.text.color = UI_COLOR_PRIMARY;
+    lv_style_copy(&style_state_warn, &style_state_idle);
+    style_state_warn.text.color = UI_COLOR_WARNING;
+    lv_style_copy(&style_state_alarm, &style_state_idle);
+    style_state_alarm.text.color = UI_COLOR_DANGER;
 }
 
-/*
- * Create styled button (LVGL v6)
- */
-lv_obj_t* ui_widget_create_button(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
-                                   lv_coord_t width, lv_coord_t height,
-                                   const char *text, ui_button_style_t style,
-                                   lv_event_cb_t callback) {
-    // Create button
-    lv_obj_t *btn = lv_btn_create(parent, NULL);
-    lv_obj_set_pos(btn, x, y);
-    lv_obj_set_size(btn, width, height);
-
-    // Apply style (LVGL v6 uses separate styles for released/pressed)
+void ui_widget_set_button_style(lv_obj_t *btn, ui_button_style_t style) {
     switch(style) {
         case BUTTON_STYLE_PRIMARY:
             lv_btn_set_style(btn, LV_BTN_STYLE_REL, &style_btn_primary_rel);
@@ -113,6 +129,62 @@ lv_obj_t* ui_widget_create_button(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
             lv_btn_set_style(btn, LV_BTN_STYLE_PR, &style_btn_default_pr);
             break;
     }
+}
+
+lv_style_t *ui_widget_screen_style(void) {
+    return &style_screen;
+}
+
+lv_obj_t *ui_widget_create_styled_label(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
+                                        lv_style_t *style, const char *text) {
+    lv_obj_t *label = lv_label_create(parent, NULL);
+
+    lv_label_set_style(label, LV_LABEL_STYLE_MAIN, style);
+    lv_label_set_text(label, text);
+    lv_obj_set_pos(label, x, y);
+
+    return label;
+}
+
+void ui_widget_set_text(lv_obj_t *label, char *shown, size_t size, const char *text) {
+    if(strcmp(shown, text)) {
+        strncpy(shown, text, size - 1);
+        shown[size - 1] = '\0';
+        lv_label_set_text(label, text);
+    }
+}
+
+void ui_widget_format_state(char *buf, size_t size) {
+    if((ui_state.system_state & STATE_ALARM) && ui_state.alarm_code)
+        snprintf(buf, size, "ALARM %u", (unsigned)ui_state.alarm_code);
+    else
+        snprintf(buf, size, "%s", ui_state_get_state_string());
+}
+
+lv_style_t *ui_widget_state_style(sys_state_t state) {
+    if(state == STATE_IDLE)
+        return &style_state_idle;
+    if(state & (STATE_ALARM|STATE_ESTOP))
+        return &style_state_alarm;
+    if(state & (STATE_HOLD|STATE_SAFETY_DOOR|STATE_TOOL_CHANGE|STATE_CHECK_MODE|STATE_SLEEP))
+        return &style_state_warn;
+
+    return &style_state_run;    // cycle, jog, homing
+}
+
+/*
+ * Create styled button (LVGL v6)
+ */
+lv_obj_t* ui_widget_create_button(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
+                                   lv_coord_t width, lv_coord_t height,
+                                   const char *text, ui_button_style_t style,
+                                   lv_event_cb_t callback) {
+    // Create button
+    lv_obj_t *btn = lv_btn_create(parent, NULL);
+    lv_obj_set_pos(btn, x, y);
+    lv_obj_set_size(btn, width, height);
+
+    ui_widget_set_button_style(btn, style);
 
     // Create label
     lv_obj_t *label = lv_label_create(btn, NULL);
@@ -137,14 +209,17 @@ lv_obj_t* ui_widget_create_label(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
     lv_obj_set_pos(label, x, y);
     lv_label_set_text(label, text);
 
-    // Apply font and color (LVGL v6)
-    static lv_style_t label_style;
-    lv_style_copy(&label_style, &lv_style_plain);
-    if(font) {
-        label_style.text.font = font;
+    // Apply font and color (LVGL v6). Styles are referenced, not copied, so
+    // each label needs its own.
+    lv_style_t *label_style = (lv_style_t *)lv_mem_alloc(sizeof(lv_style_t));
+    if(label_style) {
+        lv_style_copy(label_style, &lv_style_plain);
+        if(font) {
+            label_style->text.font = font;
+        }
+        label_style->text.color = color;
+        lv_label_set_style(label, LV_LABEL_STYLE_MAIN, label_style);
     }
-    label_style.text.color = color;
-    lv_label_set_style(label, LV_LABEL_STYLE_MAIN, &label_style);
 
     return label;
 }

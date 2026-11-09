@@ -200,6 +200,7 @@ public:
     void endTransaction() {}
     uint8_t transfer(uint8_t data);
     uint16_t transfer16(uint16_t data);
+    void writeBytes(const uint8_t *data, uint32_t len);
 private:
     spi_device_handle_t dev = NULL;
     uint32_t freq_hz = 0;

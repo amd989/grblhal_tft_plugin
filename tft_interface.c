@@ -196,7 +196,7 @@ void tft_jog_axis(uint8_t axis, float distance, float speed) {
         return;
 
     char axis_letter = 'X' + axis;
-    tft_send_command_fmt("$J=G91 %c%.3f F%.0f\n", axis_letter, distance, speed);
+    tft_send_command_fmt("$J=G91 G21 %c%.3f F%.0f", axis_letter, distance, speed);
 }
 
 void tft_jog_cancel(void) {

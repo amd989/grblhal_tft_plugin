@@ -35,6 +35,7 @@
 #include "ui_screen_manager.h"
 #include "ui_widgets.h"
 #include "screens/screen_main.h"
+#include "screens/screen_jog.h"
 
 static on_report_options_ptr on_report_options;
 
@@ -62,6 +63,7 @@ static void tft_ui_task(void *param) {
     ui_screen_manager_init();
     ui_widgets_init();
     screen_main_register();
+    screen_jog_register();
 
     // Breathing effect during startup (2 seconds)
     uint32_t splash_count = 0;

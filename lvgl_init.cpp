@@ -25,7 +25,7 @@ extern "C" void tft_log(const char *fmt, ...);  // tft_interface.c
 
 // LVGL display buffer
 static lv_disp_buf_t disp_buf;
-static lv_color_t bmp_public_buf[TFT_LVGL_BUFFER_SIZE];
+static lv_color_t bmp_public_buf[TFT_LVGL_BUFFER_SIZE] __attribute__((aligned(4)));  // DMA source for the flush
 
 // Forward declarations for callbacks
 static void lvgl_display_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
@@ -71,13 +71,10 @@ static void lvgl_display_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_co
     tft.startWrite();
     tft.setAddrWindow(area->x1, area->y1, w, h);
 
-#if TFT_USE_DMA
-    // Push pixels using DMA (non-blocking)
-    tft.pushColorsDMA(&color_p->full, w * h, true);
-#else
-    // Push pixels using blocking SPI
-    tft.pushColors(&color_p->full, w * h, true);
-#endif
+    // LV_COLOR_16_SWAP makes the buffer big-endian RGB565, the order the
+    // ST7796 expects, so send it as one block. TFT_eSPI's own pushColors()
+    // goes through its Generic processor one SPI transaction per pixel.
+    SPI.writeBytes((const uint8_t *)color_p, w * h * sizeof(lv_color_t));
 
     tft.endWrite();
 

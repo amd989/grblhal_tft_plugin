@@ -164,6 +164,10 @@ static void on_action (lv_obj_t *obj, lv_event_t event)
     } else if(obj == btn_probe) {
         lv_label_set_text(lbl_probe_status, "");
         probe_shown = -1;
+#if TOOLSETTER_ENABLE
+        // A toolsetter does not apply to a laser
+        lv_obj_set_hidden(btn_probe_tool, ui_state.laser_mode);
+#endif
         lv_obj_set_hidden(probe_panel, false);
     } else if(obj == btn_spindle && !ui_state.laser_mode) {
         if(spindle_on()) {

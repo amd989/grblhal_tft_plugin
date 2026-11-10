@@ -37,12 +37,26 @@
 // does not run unexpectedly much later.
 #define TFT_CMD_TIMEOUT_MS      2000
 
+// A chain is a command followed by chained ones, e.g. the steps of a probe
+// cycle. Chained commands wait, without the timeout, until the machine is
+// idle again. The rest of a chain is dropped when a command of it expires, on
+// an alarm, a reset or a stop, and after a failed probe.
+#define TFT_CHAIN_TIMEOUT_MS    120000
+
+#define CMD_CHAINED     0x01    // wait for idle after the previous command
+#define CMD_PROBE       0x02    // clear the probe result before sending
+#define CMD_NEEDS_PROBE 0x04    // drop the chain unless the last probe succeeded
+
 typedef struct {
     uint32_t queued_at;     // not handed to grblHAL before this time
+    uint8_t flags;
     char line[TFT_CMD_MAX_LEN];
 } tft_cmd_t;
 
 static QueueHandle_t cmd_queue = NULL;
+static volatile bool drop_chain = false;
+static bool probe_done = true;          // the last probe sent has completed
+static on_probe_completed_ptr on_probe_completed;
 static on_execute_realtime_ptr on_execute_realtime;
 
 #if TFT_DEBUG
@@ -116,6 +130,7 @@ static void tft_poll (sys_state_t state)
 
         ui_state_update_feed_spindle(st_get_realtime_rate(), sp && sp->state.on ? sp->rpm_overridden : 0.0f);
         ui_state_update_overrides(sys.override.feed_rate, sp ? sp->override_pct : 100);
+        ui_state.probe_triggered = hal.probe.get_state && hal.probe.get_state().triggered;
     }
 
     tft_sd_poll();
@@ -123,12 +138,35 @@ static void tft_poll (sys_state_t state)
     tft_cmd_t cmd;
 
     if(cmd_queue && xQueuePeek(cmd_queue, &cmd, 0) == pdTRUE && (int32_t)(now - cmd.queued_at) >= 0) {
-        if(grbl.enqueue_gcode(cmd.line)) {
+
+        sys_state_t cur_state = state_get();
+        bool chained = !!(cmd.flags & CMD_CHAINED);
+
+        if(chained && (drop_chain || (cur_state & (STATE_ALARM|STATE_ESTOP)) || now - cmd.queued_at > TFT_CHAIN_TIMEOUT_MS)) {
             xQueueReceive(cmd_queue, &cmd, 0);
-            tft_log("cmd accepted: %s", cmd.line);
-        } else if(now - cmd.queued_at > TFT_CMD_TIMEOUT_MS) {
+            drop_chain = true;
+            tft_log("cmd dropped: %s", cmd.line);
+        } else if(chained && (cur_state != STATE_IDLE || ((cmd.flags & CMD_NEEDS_PROBE) && !probe_done))) {
+            // wait for the previous command to finish
+        } else if((cmd.flags & CMD_NEEDS_PROBE) && !sys.flags.probe_succeeded) {
             xQueueReceive(cmd_queue, &cmd, 0);
-            tft_log("cmd expired: %s", cmd.line);
+            drop_chain = true;
+            tft_log("cmd dropped, probe failed: %s", cmd.line);
+        } else {
+            if(!chained)
+                drop_chain = false;     // a new chain starts
+            if(cmd.flags & CMD_PROBE)
+                sys.flags.probe_succeeded = Off;
+            if(grbl.enqueue_gcode(cmd.line)) {
+                xQueueReceive(cmd_queue, &cmd, 0);
+                if(cmd.flags & CMD_PROBE)
+                    probe_done = false;
+                tft_log("cmd accepted: %s", cmd.line);
+            } else if(!chained && now - cmd.queued_at > TFT_CMD_TIMEOUT_MS) {
+                xQueueReceive(cmd_queue, &cmd, 0);
+                drop_chain = true;
+                tft_log("cmd expired: %s", cmd.line);
+            }
         }
     }
 
@@ -151,6 +189,15 @@ static void tft_poll (sys_state_t state)
     on_execute_realtime(state);
 }
 
+// Called at the end of every probe cycle, failed ones too
+static void tft_probe_completed (void)
+{
+    probe_done = true;
+
+    if(on_probe_completed)
+        on_probe_completed();
+}
+
 void tft_interface_init (void)
 {
     cmd_queue = xQueueCreate(TFT_CMD_QUEUE_LEN, sizeof(tft_cmd_t));
@@ -160,6 +207,9 @@ void tft_interface_init (void)
 
     on_execute_realtime = grbl.on_execute_realtime;
     grbl.on_execute_realtime = tft_poll;
+
+    on_probe_completed = grbl.on_probe_completed;
+    grbl.on_probe_completed = tft_probe_completed;
 }
 
 // Realtime commands (hold, resume, reset) are ISR safe in grblHAL.
@@ -175,11 +225,8 @@ static void send_rt (char c)
  * Lines are queued and passed to grblHAL from its own loop.
  */
 
-void tft_send_command(const char *cmd) {
-    tft_send_command_delayed(cmd, 0);
-}
-
-void tft_send_command_delayed(const char *cmd, uint32_t delay_ms) {
+static void queue_command (const char *cmd, uint32_t delay_ms, uint8_t flags)
+{
     tft_cmd_t c;
 
     if(!cmd_queue || !cmd)
@@ -195,9 +242,18 @@ void tft_send_command_delayed(const char *cmd, uint32_t delay_ms) {
 
     if(*c.line) {
         c.queued_at = hal.get_elapsed_ticks() + delay_ms;
+        c.flags = flags;
         bool queued = xQueueSend(cmd_queue, &c, 0) == pdTRUE;
         tft_log("cmd %s: %s", queued ? "queued" : "DROPPED", c.line);
     }
+}
+
+void tft_send_command(const char *cmd) {
+    queue_command(cmd, 0, 0);
+}
+
+void tft_send_command_delayed(const char *cmd, uint32_t delay_ms) {
+    queue_command(cmd, delay_ms, 0);
 }
 
 void tft_send_command_fmt(const char *fmt, ...) {
@@ -224,7 +280,53 @@ void tft_jog_axis(uint8_t axis, float distance, float speed) {
 }
 
 void tft_jog_cancel(void) {
+    drop_chain = true;
     send_rt(CMD_JOG_CANCEL);
+}
+
+// Jog to work zero, cancellable like any jog
+void tft_goto_zero_xy(void) {
+    tft_send_command_fmt("$J=G90 G21 X0 Y0 F%d", TFT_JOG_FEED);
+}
+
+void tft_goto_zero_z(void) {
+    tft_send_command_fmt("$J=G90 G21 Z0 F%d", TFT_JOG_FEED_Z);
+}
+
+static void queue_fmt (uint8_t flags, const char *fmt, ...)
+{
+    char buffer[TFT_CMD_MAX_LEN];
+    va_list args;
+
+    va_start(args, fmt);
+    vsnprintf(buffer, sizeof(buffer), fmt, args);
+    va_end(args);
+
+    queue_command(buffer, 0, flags);
+}
+
+/*
+ * Probe Z with a touch plate on the work: a fast probe down from the current
+ * position, then a slow one from 2 mm above. Z zero ends up on the work
+ * surface (plate thickness taken off), and the tool TFT_PROBE_RETRACT above
+ * the plate. Absolute moves only, so the distance mode is not left at G91.
+ */
+void tft_probe_z(float work_z) {
+    const float plate = TFT_PROBE_THICKNESS;
+
+    queue_fmt(CMD_PROBE, "G21 G90 G38.2 Z%.3f F%d", work_z - TFT_PROBE_DISTANCE, TFT_PROBE_FEED);
+    queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G10 L20 P0 Z%.3f", plate);
+    queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G0 Z%.3f", plate + 2.0f);
+    queue_fmt(CMD_CHAINED|CMD_PROBE, "G38.2 Z%.3f F%d", plate - 3.0f, TFT_PROBE_FEED_SLOW);
+    queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G10 L20 P0 Z%.3f", plate);
+    queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G0 Z%.3f", plate + TFT_PROBE_RETRACT);
+}
+
+void tft_spindle(bool on) {
+    if(on)
+        tft_send_command_fmt("M3 S%d", TFT_SPINDLE_RPM);
+    else
+        tft_send_command("M5");
 }
 
 void tft_home_all(void) {
@@ -286,10 +388,12 @@ void tft_cycle_start(void) {
 }
 
 void tft_stop(void) {
+    drop_chain = true;
     send_rt(CMD_STOP);
 }
 
 void tft_reset(void) {
+    drop_chain = true;
     send_rt(CMD_RESET);
 }
 

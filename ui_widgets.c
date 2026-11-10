@@ -17,6 +17,7 @@ static lv_style_t style_btn_default_pr;
 static lv_style_t style_btn_primary_rel;
 static lv_style_t style_btn_primary_pr;
 static lv_style_t style_btn_success_rel;
+static lv_style_t style_btn_warning_rel;
 static lv_style_t style_btn_danger_rel;
 
 // Screen background
@@ -84,6 +85,12 @@ void ui_widgets_init(void) {
     style_btn_success_rel.body.grad_color = UI_COLOR_SUCCESS;
     style_btn_success_rel.body.border.color = UI_COLOR_SUCCESS;
 
+    // Warning button style (orange)
+    lv_style_copy(&style_btn_warning_rel, &style_btn_default_rel);
+    style_btn_warning_rel.body.main_color = UI_COLOR_WARNING;
+    style_btn_warning_rel.body.grad_color = UI_COLOR_WARNING;
+    style_btn_warning_rel.body.border.color = UI_COLOR_WARNING;
+
     // Danger button style (red)
     lv_style_copy(&style_btn_danger_rel, &style_btn_default_rel);
     style_btn_danger_rel.body.main_color = UI_COLOR_DANGER;
@@ -118,6 +125,10 @@ void ui_widget_set_button_style(lv_obj_t *btn, ui_button_style_t style) {
             break;
         case BUTTON_STYLE_SUCCESS:
             lv_btn_set_style(btn, LV_BTN_STYLE_REL, &style_btn_success_rel);
+            lv_btn_set_style(btn, LV_BTN_STYLE_PR, &style_btn_default_pr);
+            break;
+        case BUTTON_STYLE_WARNING:
+            lv_btn_set_style(btn, LV_BTN_STYLE_REL, &style_btn_warning_rel);
             lv_btn_set_style(btn, LV_BTN_STYLE_PR, &style_btn_default_pr);
             break;
         case BUTTON_STYLE_DANGER:

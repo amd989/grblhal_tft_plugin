@@ -69,6 +69,7 @@ typedef struct {
     float spindle_speed;            // Current spindle/laser speed (RPM or %)
     uint8_t feed_override;          // Feed override percentage (10-200)
     uint8_t spindle_override;       // Spindle override percentage (10-200)
+    bool probe_triggered;           // Probe input active (plate touched)
 
     // Machine configuration
     uint8_t n_axis;                 // Number of axes (3-6)

@@ -59,6 +59,29 @@
 #define TFT_JOG_FEED_Z          300
 #endif
 
+// Z probe with a touch plate (jog screen): plate thickness in mm, how far
+// down to search, fast and slow feed (mm/min), and lift above the plate after
+#ifndef TFT_PROBE_THICKNESS
+#define TFT_PROBE_THICKNESS     0.0f
+#endif
+#ifndef TFT_PROBE_DISTANCE
+#define TFT_PROBE_DISTANCE      50.0f
+#endif
+#ifndef TFT_PROBE_FEED
+#define TFT_PROBE_FEED          150
+#endif
+#ifndef TFT_PROBE_FEED_SLOW
+#define TFT_PROBE_FEED_SLOW     25
+#endif
+#ifndef TFT_PROBE_RETRACT
+#define TFT_PROBE_RETRACT       5.0f
+#endif
+
+// Spindle speed for the Spindle button on the jog screen (M3 S...)
+#ifndef TFT_SPINDLE_RPM
+#define TFT_SPINDLE_RPM         10000
+#endif
+
 // Debug log of touches, button clicks and commands, printed as [MSG:TFT ...]
 #ifndef TFT_DEBUG
 #define TFT_DEBUG               0

@@ -72,6 +72,17 @@ void tft_home_axis(uint8_t axis);
  * Work Coordinate Commands
  */
 
+// Jog to work zero, X/Y together or Z
+void tft_goto_zero_xy(void);
+void tft_goto_zero_z(void);
+
+// Probe Z with a touch plate and set Z zero on the work surface, from the
+// current work Z. See TFT_PROBE_* in tft_config.h.
+void tft_probe_z(float work_z);
+
+// Spindle on at TFT_SPINDLE_RPM (M3), or off (M5)
+void tft_spindle(bool on);
+
 // Zero a single axis work coordinate
 void tft_zero_axis(uint8_t axis);
 

@@ -5,11 +5,11 @@ A touchscreen user interface plugin for grblHAL using LVGL and TFT_eSPI.
 ## Features
 
 - Machine state with the alarm reason, work/machine position, Home, Unlock, Hold, Reset
-- Step jogging of X/Y/Z, set work zero
+- Jogging, set work zero, go to zero, Z probe with a touch plate, spindle on/off
 - SD card file browser and job screen: progress, elapsed time, feed and spindle overrides, hold and stop
 - Touch calibration (`$TFTCAL`), saved across resets
 
-Planned: probing and spindle/coolant controls on the jog screen, job outline (frame), Wi-Fi status.
+Planned: job outline (frame), Wi-Fi status.
 
 ## Hardware Requirements
 
@@ -102,6 +102,20 @@ Tapping a file asks for confirmation, then runs it with `$F=<path>` from the cur
 While a job runs, grblHAL ignores everything from the serial port except real-time commands (`?`, `!`, `~` and overrides), so a host like CNCjs can watch, hold and resume, but not send G-code.
 
 `examples/tft-test-air.nc` is a safe first job: ten 20 mm squares in X/Y with relative moves and the spindle off. Jog to the middle of the bed and raise Z before running it.
+
+## Jog screen
+
+- Step jogging of X/Y/Z (0.1, 1, 10, 100 mm), Stop cancels a jog
+- Zero XY, Zero Z: set work zero (`G10 L20 P0`)
+- Go XY0, Go Z0: jog to work zero, Stop cancels it. Go XY0 does not lift Z first.
+- Spindle: tap twice to start at `TFT_SPINDLE_RPM`, once to stop
+- Probe Z: touch plate probing. The panel shows the probe input live, so the clip can be checked first. It probes down at `TFT_PROBE_FEED` up to `TFT_PROBE_DISTANCE`, again slowly from 2 mm above, sets Z0 on the work surface and lifts `TFT_PROBE_RETRACT` above the plate. A failed probe, Stop or Reset drops the remaining steps, so no zero is set from a failed probe.
+
+Set the plate thickness in `my_machine.h`, it defaults to 0:
+
+```c
+#define TFT_PROBE_THICKNESS 20.0f   // mm
+```
 
 ## Architecture
 

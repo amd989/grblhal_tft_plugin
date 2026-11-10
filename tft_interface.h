@@ -93,12 +93,17 @@ void tft_tool_measure(void);
 void tft_toolsetter_set_here(void);
 #endif
 
-// Trace a rectangle in work coordinates at the current Z, as jogs.
-// Stop (jog cancel) drops the rest.
+// Trace a rectangle in work coordinates at the current Z, as jogs. In laser
+// mode with TFT_LASER_FRAME_POWER, as G1 moves with the laser at that power.
+// Stop (jog cancel or stop) drops the rest.
 void tft_frame(float min_x, float min_y, float max_x, float max_y);
 
-// Spindle on at TFT_SPINDLE_RPM (M3), or off (M5)
+// Spindle on at TFT_SPINDLE_RPM (M3), or off (M5). On is refused in laser mode.
 void tft_spindle(bool on);
+
+// Laser mode: fire at TFT_LASER_TEST_POWER while on, off after
+// TFT_LASER_TEST_MAX_MS at the latest
+void tft_laser_test(bool on);
 
 // Zero a single axis work coordinate
 void tft_zero_axis(uint8_t axis);

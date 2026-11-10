@@ -84,6 +84,8 @@ static bool toolsetter_selected = false;
 #endif
 static on_probe_completed_ptr on_probe_completed;
 static on_execute_realtime_ptr on_execute_realtime;
+static void laser_test_service(void);
+static float laser_s(float pct);
 
 #if TFT_DEBUG
 #define TFT_LOG_QUEUE_LEN       16
@@ -277,6 +279,8 @@ static void tft_poll (sys_state_t state)
         ui_state_update_overrides(sys.override.feed_rate, sp ? sp->override_pct : 100);
         ui_state.probe_triggered = hal.probe.get_state && hal.probe.get_state().triggered;
         ui_state.z_homed = !!(sys.homed.mask & bit(Z_AXIS));
+        ui_state.laser_mode = spindle && spindle->cap.laser;
+        ui_state.spindle_max = spindle ? spindle->rpm_max : 0.0f;
         ui_state.tool = gc_state.tool ? gc_state.tool->tool_id : 0;
         ui_state.tool_pending = gc_state.tool_pending;
         ui_state.tc_mode = (uint8_t)settings.tool_change.mode;
@@ -295,6 +299,7 @@ static void tft_poll (sys_state_t state)
     }
 
     tft_sd_poll();
+    laser_test_service();
 
     tft_cmd_t cmd;
 
@@ -569,11 +574,54 @@ void tft_frame(float min_x, float min_y, float max_x, float max_y) {
         { min_x, min_y }, { max_x, min_y }, { max_x, max_y }, { min_x, max_y }, { min_x, min_y }
     };
 
+    if(ui_state.laser_mode && TFT_LASER_FRAME_POWER > 0.0f) {
+        // Laser off to the first corner, then around at low power. M4 scales
+        // the power with speed, so the stops between the moves leave no dots.
+        queue_fmt(0, "G21 G90 G0 X%.3f Y%.3f", corner[0][0], corner[0][1]);
+        for(uint_fast8_t idx = 1; idx < 5; idx++)
+            queue_fmt(CMD_CHAINED, idx == 1 ? "G1 X%.3f Y%.3f F%d M4 S%.1f" : "G1 X%.3f Y%.3f",
+                       corner[idx][0], corner[idx][1], TFT_JOG_FEED, laser_s(TFT_LASER_FRAME_POWER));
+        queue_fmt(CMD_CHAINED, "M5 G0");
+        return;
+    }
+
     for(uint_fast8_t idx = 0; idx < 5; idx++)
         queue_fmt(idx ? CMD_CHAINED : 0, "$J=G90 G21 X%.3f Y%.3f F%d", corner[idx][0], corner[idx][1], TFT_JOG_FEED);
 }
 
+// S word for a laser power in percent, from $30
+static float laser_s (float pct)
+{
+    return ui_state.spindle_max * pct / 100.0f;
+}
+
+static volatile uint32_t laser_test_off_at;
+static volatile bool laser_testing = false;
+
+void tft_laser_test(bool on) {
+    if(on && ui_state.laser_mode && !laser_testing) {
+        // G1 without axis words selects a cutting motion mode, so M3 fires
+        // while standing still. M3 in G0 would stay off.
+        laser_test_off_at = hal.get_elapsed_ticks() + TFT_LASER_TEST_MAX_MS;
+        laser_testing = true;
+        queue_fmt(0, "G1 F%d M3 S%.1f", TFT_JOG_FEED, laser_s(TFT_LASER_TEST_POWER));
+    } else if(!on && laser_testing) {
+        laser_testing = false;
+        tft_send_command("M5");
+    }
+}
+
+// Called from the grblHAL loop: the laser test never outlasts its limit
+static void laser_test_service (void)
+{
+    if(laser_testing && (int32_t)(hal.get_elapsed_ticks() - laser_test_off_at) >= 0)
+        tft_laser_test(false);
+}
+
 void tft_spindle(bool on) {
+    if(on && ui_state.laser_mode)
+        return;     // M3 S<max> would fire the laser at full power
+
     if(on)
         tft_send_command_fmt("M3 S%d", TFT_SPINDLE_RPM);
     else

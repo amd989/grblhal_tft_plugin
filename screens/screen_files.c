@@ -181,7 +181,10 @@ static void show_confirm (const tft_sd_entry_t *e)
     char size[16], info[96];
 
     format_size(size, sizeof(size), e->size);
-    snprintf(info, sizeof(info), "%s, from the current work zero. Frame traces at the current Z.", size);
+    if(ui_state.laser_mode && TFT_LASER_FRAME_POWER > 0.0f)
+        snprintf(info, sizeof(info), "%s, from the current work zero. Frame traces with the laser at %.0f%%.", size, (double)TFT_LASER_FRAME_POWER);
+    else
+        snprintf(info, sizeof(info), "%s, from the current work zero. Frame traces at the current Z.", size);
 
     lv_label_set_text(lbl_confirm_name, e->name);
     lv_label_set_text(lbl_confirm_info, info);
@@ -258,6 +261,9 @@ static void on_confirm (lv_obj_t *obj, lv_event_t event)
         return;
 
     if(obj == btn_cancel) {
+        // Also stops a frame being traced, G1 moves in laser mode
+        if(ui_state.system_state & (STATE_CYCLE|STATE_JOG))
+            tft_stop();
         starting = framing = false;
         lv_obj_set_hidden(confirm, true);
     } else if(obj == btn_frame && !framing && !starting) {
@@ -307,7 +313,7 @@ static void on_resume (lv_obj_t *obj, lv_event_t event)
     } else if(obj == btn_resume_start && !preparing) {
         if(ui_state.system_state != STATE_IDLE)
             lv_label_set_text(lbl_resume_status, "Machine must be idle");
-        else if(!ui_state.z_homed)
+        else if(!ui_state.z_homed && !ui_state.laser_mode)
             lv_label_set_text(lbl_resume_status, "Home the machine first");
         else {
             tft_log("resume %s from line %u", selected, (unsigned)from_line);

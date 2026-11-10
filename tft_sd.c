@@ -21,6 +21,7 @@
 #include "grbl/planner.h"
 #include "grbl/system.h"
 #include "grbl/state_machine.h"
+#include "grbl/spindle_control.h"
 
 #include "tft_config.h"
 
@@ -433,6 +434,7 @@ static struct {
     float speed;
     uint8_t spindle;            // 3, 4, 5
     bool mist, flood;
+    bool laser;                 // laser mode: Z homing optional, no spin-up dwell
     uint32_t written_lines;     // lines of the restore part
 } rs;
 
@@ -585,7 +587,8 @@ static bool resume_write_restore (void)
 
     ok = ok && resume_write("(TFT resume from line %u)", (unsigned)rs.target);
     ok = ok && resume_write("G21 G90 G%u %s", (unsigned)rs.plane, wcs);
-    ok = ok && resume_write("G53 G0 Z%.3f", sys.home_position[Z_AXIS]);
+    if(!rs.laser || (sys.homed.mask & bit(Z_AXIS)))    // a laser may have no Z homing
+        ok = ok && resume_write("G53 G0 Z%.3f", sys.home_position[Z_AXIS]);
     if(rs.has_x || rs.has_y) {
         char xy[40] = "";
         if(rs.has_x)
@@ -595,15 +598,19 @@ static bool resume_write_restore (void)
         ok = ok && resume_write("G0%s", xy);
     }
     if(spindle_on) {
+        // A laser in G0 stays off until the next cut
         ok = ok && resume_write("M%u S%.0f", (unsigned)rs.spindle, rs.speed);
-        ok = ok && resume_write("G4 P%u", (unsigned)TFT_RESUME_DWELL);
+        if(!rs.laser)
+            ok = ok && resume_write("G4 P%u", (unsigned)TFT_RESUME_DWELL);
     } else if(rs.speed > 0.0f)
         ok = ok && resume_write("S%.0f", rs.speed);
     if(rs.mist)
         ok = ok && resume_write("M7");
     if(rs.flood)
         ok = ok && resume_write("M8");
-    if(rs.has_z) {
+    if(rs.has_z && rs.laser)
+        ok = ok && resume_write("G0 Z%.3f", rs.z);     // focus height, laser off in G0
+    else if(rs.has_z) {
         float plunge = rs.plunge > 0.0f ? rs.plunge * k : rs.feed > 0.0f ? rs.feed * k : (float)TFT_PROBE_FEED;
         ok = ok && resume_write("G0 Z%.3f", rs.z + TFT_RESUME_CLEARANCE);
         ok = ok && resume_write("G1 Z%.3f F%.1f", rs.z, plunge);
@@ -638,7 +645,11 @@ static void resume_start (void)
     rs.spindle = 5;
     resumed.pending = false;
 
-    if(!(sys.homed.mask & bit(Z_AXIS))) {
+    spindle_ptrs_t *spindle = spindle_get(0);
+    rs.laser = spindle && spindle->cap.laser;
+
+    // CNC: the restore goes up to the Z home position first
+    if(!rs.laser && !(sys.homed.mask & bit(Z_AXIS))) {
         resume_finish("Home the machine first");
         return;
     }

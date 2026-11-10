@@ -85,6 +85,20 @@
 #define TFT_SPINDLE_RPM         10000
 #endif
 
+// Laser mode ($32=1): the jog screen's Laser button fires while held, at
+// TFT_LASER_TEST_POWER percent, for at most TFT_LASER_TEST_MAX_MS. Frame
+// traces the outline with the laser at TFT_LASER_FRAME_POWER percent, 0 for
+// laser off (jogs, as in CNC mode).
+#ifndef TFT_LASER_TEST_POWER
+#define TFT_LASER_TEST_POWER    1.0f
+#endif
+#ifndef TFT_LASER_TEST_MAX_MS
+#define TFT_LASER_TEST_MAX_MS   5000
+#endif
+#ifndef TFT_LASER_FRAME_POWER
+#define TFT_LASER_FRAME_POWER   1.0f
+#endif
+
 // Macro buttons: defaults for settings $450-$455, "Label|G-code|G-code...".
 // Change them with $450=... from a console, an empty setting hides the button.
 #ifndef TFT_MACRO_1

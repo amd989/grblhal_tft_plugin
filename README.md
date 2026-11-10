@@ -11,6 +11,7 @@ A touchscreen user interface plugin for grblHAL using LVGL and TFT_eSPI.
 - Resume a job from a line, after a broken bit or a stop
 - Tool changes (M6): the screen asks for the next tool, Resume continues, with `$341=3` after measuring it on the toolsetter
 - Six macro buttons, set with `$450`-`$455`
+- CNC and laser: the same firmware adapts to laser mode (`$32=1`), see Laser mode
 - Wi-Fi or Ethernet status with the IP address on the main screen
 - Touch calibration (`$TFTCAL`), saved across resets, and a click on each touch
 
@@ -132,6 +133,18 @@ Limits: tool changes, G92 offsets and G43 tool offsets before the line are not r
   - Set here: jog the bit a few mm above the setter and tap twice. Saves the machine position as G59.3, the same place grblHAL's `$341` tool change modes use. Start high enough for longer tools: the probe goes down at most `TFT_PROBE_DISTANCE` from there.
   - Measure: needs Z homed. Goes up to the Z home position, over the setter, down to the G59.3 Z, then probes fast and slow with the toolsetter input. The first measurement after homing sets the reference (`$TLR`); measure it right after Probe Z. Later tools get a tool length offset (`G43.1`) from that reference, so Z0 on the work stays valid. Homing clears the reference. A failed probe, Stop or Reset drops the remaining steps.
   - The panel shows the setter input live, the saved position and the active offset. Probing goes back to the touch plate input when it is done.
+
+## Laser mode
+
+One firmware serves a CNC and a laser: each board keeps its own settings, and the screen follows `$32` (laser mode, with the PWM output on GPIO 32 as the laser). In laser mode:
+
+- Jog screen: the Spindle button becomes **Laser**, a test fire at `TFT_LASER_TEST_POWER` (1%) while it is held, off when released and after `TFT_LASER_TEST_MAX_MS` (5 s) at the latest. It sends `G1 F.. M3 S..`, as M3 in G0 would stay off, then `M5`. The full power M3 of the CNC Spindle button is never sent.
+- Frame traces the outline with the laser at `TFT_LASER_FRAME_POWER` (1%, 0 for laser off): G0 to the first corner, G1 with M4 around it (M4 scales the power with speed, so it is off while stopped), then `M5`. Cancel on the confirm panel stops it.
+- Job screen: laser override and power in percent of `$30`.
+- Resume from line: no spin-up dwell; it goes up to the Z home position only when Z is homed, so a laser without Z homing works, and moves to the file's Z with the laser off.
+- Z stays: jogging, Zero Z, Go Z0 and Probe Z work as on the CNC, for a motorized Z.
+
+Laser settings to check after flashing a laser board: `$32=1`, `$30` (S for 100%, often 1000), `$31=0`, `$33` (PWM frequency, often 1000), and `$22`/`$23` for homing. The tool change mode (`$341`) and toolsetter do not apply.
 
 ## Tool changes
 

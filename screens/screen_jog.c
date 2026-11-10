@@ -14,6 +14,8 @@
  *
  * Each tap jogs one step: $J=G91 G21 <axis><step> F<feed>. Going to zero is
  * a jog too, so Stop cancels it. Spindle on takes two taps, off one.
+ * In laser mode ($32=1) the Spindle button is Laser: it fires at
+ * TFT_LASER_TEST_POWER while held, see tft_laser_test().
  * Runs in the UI task only, see screen_main.c.
  */
 
@@ -85,7 +87,7 @@ static bool tool_set_armed;
 static uint8_t step_idx = 1;    // 1 mm
 static char txt_state[24], txt_pos[64], txt_spindle[16], txt_probe_input[32];
 static uint32_t last_update, spindle_armed_at;
-static bool spindle_armed;
+static bool spindle_armed, laser_firing;
 static int8_t spindle_shown = -1;
 static int8_t probe_shown = -1;
 
@@ -163,7 +165,7 @@ static void on_action (lv_obj_t *obj, lv_event_t event)
         lv_label_set_text(lbl_probe_status, "");
         probe_shown = -1;
         lv_obj_set_hidden(probe_panel, false);
-    } else if(obj == btn_spindle) {
+    } else if(obj == btn_spindle && !ui_state.laser_mode) {
         if(spindle_on()) {
             tft_log("btn spindle off");
             tft_spindle(false);
@@ -179,6 +181,29 @@ static void on_action (lv_obj_t *obj, lv_event_t event)
         spindle_shown = -1;
         last_update = 0;
     }
+}
+
+// Laser mode: the Spindle button fires the laser at low power while held
+static void on_spindle (lv_obj_t *obj, lv_event_t event)
+{
+    if(!ui_state.laser_mode) {
+        on_action(obj, event);
+        return;
+    }
+
+    if(event == LV_EVENT_PRESSED && ui_state.system_state == STATE_IDLE) {
+        tft_log("btn laser test on");
+        laser_firing = true;
+        tft_laser_test(true);
+    } else if((event == LV_EVENT_RELEASED || event == LV_EVENT_PRESS_LOST) && laser_firing) {
+        tft_log("btn laser test off");
+        laser_firing = false;
+        tft_laser_test(false);
+    } else
+        return;
+
+    spindle_shown = -1;
+    last_update = 0;
 }
 
 static void on_probe_panel (lv_obj_t *obj, lv_event_t event)
@@ -408,7 +433,7 @@ static void screen_create (lv_obj_t *parent)
     btn_go_xy = col_button(parent, 2, 0, "Go XY0", on_action);
     btn_go_z = col_button(parent, 2, 1, "Go Z0", on_action);
     btn_probe = col_button(parent, 3, 0, "Probe Z", on_action);
-    btn_spindle = col_button(parent, 3, 1, "Spindle", on_action);
+    btn_spindle = col_button(parent, 3, 1, "Spindle", on_spindle);
     lbl_spindle = lv_obj_get_child(btn_spindle, NULL);
     txt_spindle[0] = '\0';
 
@@ -431,8 +456,20 @@ static void screen_show (void)
     lv_obj_set_hidden(tool_panel, true);
 #endif
     spindle_armed = false;
+    if(laser_firing) {
+        laser_firing = false;
+        tft_laser_test(false);
+    }
     spindle_shown = -1;
     last_update = 0;    // refresh now
+}
+
+static void screen_hide (void)
+{
+    if(laser_firing) {
+        laser_firing = false;
+        tft_laser_test(false);
+    }
 }
 
 static void screen_update (void)
@@ -465,11 +502,13 @@ static void screen_update (void)
     if(spindle_armed && lv_tick_elaps(spindle_armed_at) > CONFIRM_MS)
         spindle_armed = false;
 
-    int8_t sp = spindle_on() ? 2 : spindle_armed ? 1 : 0;
+    // Laser mode: Laser button, orange while firing.
+    int8_t sp = ui_state.laser_mode ? (laser_firing ? 4 : 3) : spindle_on() ? 2 : spindle_armed ? 1 : 0;
     if(sp != spindle_shown) {
         spindle_shown = sp;
-        ui_widget_set_button_style(btn_spindle, sp == 2 ? BUTTON_STYLE_SUCCESS : sp == 1 ? BUTTON_STYLE_WARNING : BUTTON_STYLE_DEFAULT);
-        ui_widget_set_text(lbl_spindle, txt_spindle, sizeof(txt_spindle), sp == 1 ? "Sure?" : "Spindle");
+        ui_widget_set_button_style(btn_spindle, sp == 2 ? BUTTON_STYLE_SUCCESS : (sp == 1 || sp == 4) ? BUTTON_STYLE_WARNING : BUTTON_STYLE_DEFAULT);
+        ui_widget_set_text(lbl_spindle, txt_spindle, sizeof(txt_spindle),
+                            sp == 1 ? "Sure?" : sp == 3 ? "Laser" : sp == 4 ? "Firing" : "Spindle");
     }
 
     // Live probe input on the probe panel, to check the clip before probing
@@ -494,7 +533,7 @@ void screen_jog_register (void)
     ui_screen_callbacks_t callbacks = {
         .create = screen_create,
         .show = screen_show,
-        .hide = NULL,
+        .hide = screen_hide,
         .update = screen_update,
         .destroy = NULL
     };

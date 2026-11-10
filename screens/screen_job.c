@@ -271,7 +271,11 @@ static void screen_update (void)
 
     snprintf(buf, sizeof(buf), "Feed %u%%   %.0f mm/min", (unsigned)ui_state.feed_override, ui_state.feed_rate);
     ui_widget_set_text(lbl_feed, txt_feed, sizeof(txt_feed), buf);
-    snprintf(buf, sizeof(buf), "Spindle %u%%   %.0f rpm", (unsigned)ui_state.spindle_override, ui_state.spindle_speed);
+    if(ui_state.laser_mode)
+        snprintf(buf, sizeof(buf), "Laser %u%%   power %.0f%%", (unsigned)ui_state.spindle_override,
+                  ui_state.spindle_max > 0.0f ? ui_state.spindle_speed * 100.0f / ui_state.spindle_max : 0.0f);
+    else
+        snprintf(buf, sizeof(buf), "Spindle %u%%   %.0f rpm", (unsigned)ui_state.spindle_override, ui_state.spindle_speed);
     ui_widget_set_text(lbl_spindle, txt_spindle, sizeof(txt_spindle), buf);
 
     ui_widget_set_text(lbl_hold, txt_hold, sizeof(txt_hold), (state & (STATE_HOLD|STATE_SAFETY_DOOR|STATE_TOOL_CHANGE)) ? LV_SYMBOL_PLAY " Resume" : LV_SYMBOL_PAUSE " Hold");

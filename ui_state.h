@@ -72,6 +72,8 @@ typedef struct {
     uint8_t spindle_override;       // Spindle override percentage (10-200)
     bool probe_triggered;           // Probe input active (plate touched)
     char net_status[40];            // "Wi-Fi 192.168.1.20", "" without networking
+    bool laser_mode;                // $32=1 and the spindle is a PWM laser
+    float spindle_max;              // $30, S for 100% laser power
     bool z_homed;                   // Z homed: tool measurement and resume move to the Z home position
     int32_t tool;                   // Current tool number
     int32_t tool_pending;           // Tool for the next M6, shown during a tool change

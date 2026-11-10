@@ -797,11 +797,14 @@ static void update_job (void)
 
         job.size = info->size;
         job.pos = info->pos;
-        uint32_t done = line_in_progress(info->line, queued);
+        // line_number starts at 1 and counts up as lines are read, so the lines
+        // read so far is one less. N words in the file overwrite it.
+        uint32_t lines_read = info->line_number > 1 ? (uint32_t)info->line_number - 1 : 0;
+        uint32_t done = line_in_progress(lines_read, queued);
 
-        job.line = (int32_t)info->line + job_line_offset > 0 ? info->line + job_line_offset : 0;
+        job.line = (int32_t)lines_read + job_line_offset > 0 ? lines_read + job_line_offset : 0;
         job.line_done = (int32_t)done + job_line_offset > 0 ? done + job_line_offset : 0;
-        job.pos_done = info->line ? (uint32_t)((uint64_t)info->pos * done / info->line) : 0;
+        job.pos_done = lines_read ? (uint32_t)((uint64_t)info->pos * done / lines_read) : 0;
         job.elapsed_ms = now - started_at;
     } else if(job.active) {
         job.elapsed_ms = now - started_at;

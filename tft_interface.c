@@ -153,10 +153,10 @@ static float work_z (float mpos)
 // Build the line for a tool measurement step. False drops the chain.
 static bool build_tls_line (tft_cmd_t *cmd)
 {
-    coord_data_t g59_3;
+    coord_system_data_t g59_3;
     float pz = probe_mpos_z();
 
-    if(!settings_read_coord_data(CoordinateSystem_G59_3, &g59_3.values))
+    if(!settings_read_coord_data(CoordinateSystem_G59_3, &g59_3))
         return false;
 
     switch((cmd_kind_t)cmd->kind) {
@@ -166,16 +166,16 @@ static bool build_tls_line (tft_cmd_t *cmd)
             break;
 
         case Cmd_TlsXY:
-            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 X%.3f Y%.3f", g59_3.values[X_AXIS], g59_3.values[Y_AXIS]);
+            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 X%.3f Y%.3f", g59_3.coord.values[X_AXIS], g59_3.coord.values[Y_AXIS]);
             break;
 
         case Cmd_TlsZ:
-            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 Z%.3f", g59_3.values[Z_AXIS]);
+            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 Z%.3f", g59_3.coord.values[Z_AXIS]);
             break;
 
         case Cmd_TlsProbeFast:
             snprintf(cmd->line, sizeof(cmd->line), "G21 G90 G38.2 Z%.3f F%d",
-                      work_z(g59_3.values[Z_AXIS] - TFT_PROBE_DISTANCE), TFT_PROBE_FEED);
+                      work_z(g59_3.coord.values[Z_AXIS] - TFT_PROBE_DISTANCE), TFT_PROBE_FEED);
             break;
 
         case Cmd_TlsRetract:
@@ -220,16 +220,16 @@ static void select_probe (bool toolsetter)
 
 static void read_toolsetter_state (void)
 {
-    coord_data_t g59_3;
+    coord_system_data_t g59_3;
 
     ui_state.toolsetter_triggered = hal.probe.is_triggered && hal.probe.is_triggered(Probe_Toolsetter);
     ui_state.tlo_ref_set = !!(sys.tlo_reference_set.mask & bit(Z_AXIS));
-    ui_state.tlo_z = gc_state.tool_length_offset[Z_AXIS];
+    ui_state.tlo_z = gc_state.modal.tool_length_offset[Z_AXIS];
 
-    if(settings_read_coord_data(CoordinateSystem_G59_3, &g59_3.values)) {
-        ui_state.tls_pos_set = g59_3.values[X_AXIS] != 0.0f || g59_3.values[Y_AXIS] != 0.0f || g59_3.values[Z_AXIS] != 0.0f;
+    if(settings_read_coord_data(CoordinateSystem_G59_3, &g59_3)) {
+        ui_state.tls_pos_set = g59_3.coord.values[X_AXIS] != 0.0f || g59_3.coord.values[Y_AXIS] != 0.0f || g59_3.coord.values[Z_AXIS] != 0.0f;
         for(uint_fast8_t idx = 0; idx < 3 && idx < N_AXIS; idx++)
-            ui_state.tls_pos[idx] = g59_3.values[idx];
+            ui_state.tls_pos[idx] = g59_3.coord.values[idx];
     }
 }
 

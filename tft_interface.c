@@ -34,10 +34,10 @@
 #define TFT_CMD_MAX_LEN         96
 // Drop a command grblHAL has not accepted by then (busy, or in Hold), so it
 // does not run unexpectedly much later.
-#define TFT_CMD_TIMEOUT_MS      1000
+#define TFT_CMD_TIMEOUT_MS      2000
 
 typedef struct {
-    uint32_t queued_at;
+    uint32_t queued_at;     // not handed to grblHAL before this time
     char line[TFT_CMD_MAX_LEN];
 } tft_cmd_t;
 
@@ -94,15 +94,28 @@ static void tft_poll (sys_state_t state)
         for(uint_fast8_t idx = 0; idx < N_AXIS; idx++)
             wpos[idx] = mpos[idx] - gc_get_offset(idx, true);
 
+        sys_state_t now_state = state_get();
+        uint16_t alarm = (now_state & STATE_ALARM) ? (uint16_t)sys.alarm : 0;
+
+#if TFT_DEBUG
+        static sys_state_t last_state = (sys_state_t)-1;
+        static uint16_t last_alarm = 0xFFFF;
+        if(now_state != last_state || alarm != last_alarm) {
+            tft_log("state 0x%X alarm %u", (unsigned)now_state, (unsigned)alarm);
+            last_state = now_state;
+            last_alarm = alarm;
+        }
+#endif
+
         ui_state_update_position(wpos, mpos);
-        ui_state_update_system_state(state_get());
-        ui_state_set_alarm(state_get() == STATE_ALARM ? (uint16_t)sys.alarm : 0);
+        ui_state_update_system_state(now_state);
+        ui_state_set_alarm(alarm);
         ui_state_update_feed_spindle(st_get_realtime_rate(), 0.0f);
     }
 
     tft_cmd_t cmd;
 
-    if(cmd_queue && xQueuePeek(cmd_queue, &cmd, 0) == pdTRUE) {
+    if(cmd_queue && xQueuePeek(cmd_queue, &cmd, 0) == pdTRUE && (int32_t)(now - cmd.queued_at) >= 0) {
         if(grbl.enqueue_gcode(cmd.line)) {
             xQueueReceive(cmd_queue, &cmd, 0);
             tft_log("cmd accepted: %s", cmd.line);
@@ -156,6 +169,10 @@ static void send_rt (char c)
  */
 
 void tft_send_command(const char *cmd) {
+    tft_send_command_delayed(cmd, 0);
+}
+
+void tft_send_command_delayed(const char *cmd, uint32_t delay_ms) {
     tft_cmd_t c;
 
     if(!cmd_queue || !cmd)
@@ -170,7 +187,7 @@ void tft_send_command(const char *cmd) {
         *eol = '\0';
 
     if(*c.line) {
-        c.queued_at = hal.get_elapsed_ticks();
+        c.queued_at = hal.get_elapsed_ticks() + delay_ms;
         bool queued = xQueueSend(cmd_queue, &c, 0) == pdTRUE;
         tft_log("cmd %s: %s", queued ? "queued" : "DROPPED", c.line);
     }
@@ -270,7 +287,14 @@ void tft_reset(void) {
 }
 
 void tft_unlock(void) {
-    tft_send_command("$X");
+    // grblHAL refuses $X after a critical alarm (e.g. hard limit) until a
+    // reset, so reset first. The machine is already stopped in alarm.
+    if(ui_state.system_state & STATE_ALARM) {
+        send_rt(CMD_RESET);
+        // Let the reset finish first, it clears grblHAL's command buffer
+        tft_send_command_delayed("$X", 300);
+    } else
+        tft_send_command("$X");
 }
 
 /*

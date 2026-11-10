@@ -267,3 +267,29 @@ const char* ui_state_get_state_string(void) {
             return "Unknown";
     }
 }
+
+const char* ui_state_get_alarm_string(void) {
+    if(!(ui_state.system_state & STATE_ALARM))
+        return "";
+
+    switch(ui_state.alarm_code) {
+        case 1:  return "Hard limit hit - Unlock to clear";
+        case 2:  return "Soft limit - target out of travel";
+        case 3:  return "Reset while moving - position lost";
+        case 4:
+        case 5:  return "Probe failed";
+        case 6:  return "Homing aborted by reset";
+        case 7:  return "Homing aborted, door open";
+        case 8:  return "Homing: pull-off did not clear switch";
+        case 9:  return "Homing: switch not found";
+        case 10: return "E-stop";
+        case 11: return "Homing required";
+        case 12: return "Limit switch engaged";
+        case 13: return "Probe protection";
+        case 14: return "Spindle not at speed";
+        case 15: return "Homing: auto squaring failed";
+        case 17: return "Motor fault";
+        case 18: return "Homing failed";
+        default: return "Unlock to clear";
+    }
+}

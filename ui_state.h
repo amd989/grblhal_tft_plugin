@@ -166,6 +166,11 @@ char ui_state_get_axis_name(uint8_t axis);
  */
 const char* ui_state_get_state_string(void);
 
+/*
+ * Get a short description of the active alarm ("Hard limit", ...), or "" if none
+ */
+const char* ui_state_get_alarm_string(void);
+
 #ifdef __cplusplus
 }
 #endif

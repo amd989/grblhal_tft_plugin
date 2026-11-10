@@ -29,13 +29,13 @@
 #define DRO_AXES        (N_AXIS < 3 ? N_AXIS : 3)
 #define UPDATE_MS       100
 
-static lv_style_t s_axis, s_value;
+static lv_style_t s_axis, s_value, s_reason;
 
-static lv_obj_t *lbl_state, *lbl_coord, *lbl_hold;
+static lv_obj_t *lbl_state, *lbl_reason, *lbl_coord, *lbl_hold;
 static lv_obj_t *lbl_value[DRO_AXES];
 
 // Last shown text, so labels are only redrawn when they change
-static char txt_state[24], txt_coord[8], txt_hold[8];
+static char txt_state[24], txt_reason[48], txt_coord[8], txt_hold[8];
 static char txt_value[DRO_AXES][16];
 static uint32_t last_update;
 
@@ -48,6 +48,10 @@ static void styles_init (void)
     lv_style_copy(&s_value, &lv_style_plain);
     s_value.text.font = UI_FONT_XLARGE;
     s_value.text.color = UI_COLOR_TEXT;
+
+    lv_style_copy(&s_reason, &lv_style_plain);
+    s_reason.text.font = UI_FONT_MEDIUM;
+    s_reason.text.color = UI_COLOR_DANGER;
 }
 
 /*
@@ -121,13 +125,19 @@ static void screen_create (lv_obj_t *parent)
 
     ui_widget_create_button(parent, 236, 8, 104, 44, "Jog", BUTTON_STYLE_PRIMARY, on_jog);
 
+    // Alarm reason, empty unless in alarm
+    lbl_reason = ui_widget_create_styled_label(parent, 16, 56, &s_reason, "");
+    lv_label_set_long_mode(lbl_reason, LV_LABEL_LONG_CROP);
+    lv_obj_set_width(lbl_reason, 452);
+    txt_reason[0] = '\0';
+
     lv_obj_t *btn = ui_widget_create_button(parent, 352, 8, 116, 44, "WPos", BUTTON_STYLE_DEFAULT, on_coord);
     lbl_coord = lv_obj_get_child(btn, NULL);
     strcpy(txt_coord, "WPos");
 
     // Position readout
     for(uint_fast8_t idx = 0; idx < DRO_AXES; idx++) {
-        lv_coord_t y = 70 + idx * 56;
+        lv_coord_t y = 80 + idx * 54;
         char name[2] = { ui_state_get_axis_name(idx), '\0' };
 
         ui_widget_create_styled_label(parent, 32, y, &s_axis, name);
@@ -173,6 +183,8 @@ static void screen_update (void)
         lv_label_set_style(lbl_state, LV_LABEL_STYLE_MAIN, ui_widget_state_style(state));
         ui_widget_set_text(lbl_state, txt_state, sizeof(txt_state), buf);
     }
+
+    ui_widget_set_text(lbl_reason, txt_reason, sizeof(txt_reason), ui_state_get_alarm_string());
 
     // Position
     float *pos = ui_state.coord_mode == COORD_MODE_WORK ? ui_state.work_position : ui_state.machine_position;

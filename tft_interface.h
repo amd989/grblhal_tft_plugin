@@ -43,6 +43,9 @@ void tft_log(const char *fmt, ...);
 // Send raw G-code command
 void tft_send_command(const char *cmd);
 
+// Send raw G-code command, handed to grblHAL no earlier than delay_ms from now
+void tft_send_command_delayed(const char *cmd, uint32_t delay_ms);
+
 // Send formatted G-code command
 void tft_send_command_fmt(const char *fmt, ...);
 

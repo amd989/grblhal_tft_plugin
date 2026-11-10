@@ -115,14 +115,21 @@
 
 #define AUXINPUT0_PIN       GPIO_NUM_22
 #if !I2C_ENABLE
-#define AUXINPUT1_PIN       GPIO_NUM_4 // Cycle start  // J2,4 (I2C_SCL)
+#define AUXINPUT1_PIN       GPIO_NUM_4 // Cycle start or toolsetter  // J2,4 (I2C_SCL)
+#endif
+
+// GPIO 4 (J2 pin 4) is either the toolsetter or cycle start.
+// Toolsetter: a normally open switch from J2 pin 4 to GND, internal pull-up.
+// Do not use GPIO 0 (J2 SDA) for an input, it is a boot strapping pin.
+#if TOOLSETTER_ENABLE && defined(AUXINPUT1_PIN)
+#define TOOLSETTER_PIN          AUXINPUT1_PIN
 #endif
 
 // Define user-control controls (cycle start, reset, feed hold) input pins.
 // Cycle start idles high with nothing on J2, which grblHAL reads as active
 // (Pn:S). Set $14=4 to invert it, or DEFAULT_CONTROL_SIGNALS_INVERT_MASK in
 // my_machine.h. A board map is read too late to change that default.
-#if (CONTROL_ENABLE & CONTROL_CYCLE_START) && defined(AUXINPUT1_PIN)
+#if (CONTROL_ENABLE & CONTROL_CYCLE_START) && defined(AUXINPUT1_PIN) && !TOOLSETTER_ENABLE
 #define CYCLE_START_PIN         AUXINPUT1_PIN
 #endif
 

@@ -10,6 +10,7 @@
  *   right   step size 0.1 / 1 / 10 / 100 mm, go to XY0 / Z0, probe Z, spindle
  *   bottom  work position
  *   overlay confirm before probing, with the live probe input
+ *   overlay tool setter (TOOLSETTER_ENABLE): set its position, measure a tool
  *
  * Each tap jogs one step: $J=G91 G21 <axis><step> F<feed>. Going to zero is
  * a jog too, so Stop cancels it. Spindle on takes two taps, off one.
@@ -72,6 +73,14 @@ static lv_obj_t *btn_step[N_STEPS];
 static lv_obj_t *btn_zero_xy, *btn_zero_z, *btn_go_xy, *btn_go_z, *btn_probe, *btn_spindle, *lbl_spindle;
 static lv_obj_t *lbl_state, *lbl_pos;
 static lv_obj_t *probe_panel, *lbl_probe_input, *lbl_probe_status, *btn_probe_start, *btn_probe_cancel;
+#if TOOLSETTER_ENABLE
+static lv_obj_t *btn_probe_tool, *tool_panel, *lbl_tool_input, *lbl_tool_pos, *lbl_tool_ofs, *lbl_tool_status;
+static lv_obj_t *btn_tool_back, *btn_tool_set, *btn_tool_measure, *lbl_tool_set;
+static char txt_tool_input[32], txt_tool_pos[64], txt_tool_ofs[64], txt_tool_set[16];
+static int8_t tool_shown = -1, tool_set_shown = -1;
+static uint32_t tool_set_armed_at;
+static bool tool_set_armed;
+#endif
 
 static uint8_t step_idx = 1;    // 1 mm
 static char txt_state[24], txt_pos[64], txt_spindle[16], txt_probe_input[32];
@@ -179,6 +188,16 @@ static void on_probe_panel (lv_obj_t *obj, lv_event_t event)
 
     if(obj == btn_probe_cancel)
         lv_obj_set_hidden(probe_panel, true);
+#if TOOLSETTER_ENABLE
+    else if(obj == btn_probe_tool) {
+        lv_obj_set_hidden(probe_panel, true);
+        lv_label_set_text(lbl_tool_status, "");
+        tool_shown = tool_set_shown = -1;
+        tool_set_armed = false;
+        txt_tool_pos[0] = txt_tool_ofs[0] = '\0';
+        lv_obj_set_hidden(tool_panel, false);
+    }
+#endif
     else if(obj == btn_probe_start) {
         if(ui_state.system_state != STATE_IDLE)
             lv_label_set_text(lbl_probe_status, "Machine must be idle");
@@ -191,6 +210,46 @@ static void on_probe_panel (lv_obj_t *obj, lv_event_t event)
         }
     }
 }
+
+#if TOOLSETTER_ENABLE
+
+static void on_tool_panel (lv_obj_t *obj, lv_event_t event)
+{
+    if(event != LV_EVENT_CLICKED)
+        return;
+
+    if(obj == btn_tool_back)
+        lv_obj_set_hidden(tool_panel, true);
+    else if(ui_state.system_state != STATE_IDLE)
+        lv_label_set_text(lbl_tool_status, "Machine must be idle");
+    else if(obj == btn_tool_set) {
+        // Two taps, it overwrites the saved position
+        if(!tool_set_armed) {
+            tool_set_armed = true;
+            tool_set_armed_at = lv_tick_get();
+        } else {
+            tft_log("btn toolsetter set");
+            tft_toolsetter_set_here();
+            tool_set_armed = false;
+            lv_label_set_text(lbl_tool_status, "Toolsetter position saved");
+        }
+        tool_set_shown = -1;
+    } else if(obj == btn_tool_measure) {
+        if(!ui_state.tls_homed)
+            lv_label_set_text(lbl_tool_status, "Home the machine first");
+        else if(!ui_state.tls_pos_set)
+            lv_label_set_text(lbl_tool_status, "Set the toolsetter position first");
+        else if(ui_state.toolsetter_triggered)
+            lv_label_set_text(lbl_tool_status, "Toolsetter already triggered");
+        else {
+            tft_log("btn tool measure");
+            tft_tool_measure();
+            lv_label_set_text(lbl_tool_status, ui_state.tlo_ref_set ? "Measuring, sets the offset" : "Measuring, sets the reference");
+        }
+    }
+}
+
+#endif
 
 static void on_back (lv_obj_t *obj, lv_event_t event)
 {
@@ -228,11 +287,83 @@ static void probe_panel_create (lv_obj_t *parent)
     txt_probe_input[0] = '\0';
     lbl_probe_status = ui_widget_create_styled_label(probe_panel, 16, 196, &s_text, "");
 
+#if TOOLSETTER_ENABLE
+    btn_probe_cancel = ui_widget_create_button(probe_panel, 12, 248, 144, 60, "Cancel", BUTTON_STYLE_DEFAULT, on_probe_panel);
+    btn_probe_tool = ui_widget_create_button(probe_panel, 168, 248, 144, 60, "Tool setter", BUTTON_STYLE_DEFAULT, on_probe_panel);
+    btn_probe_start = ui_widget_create_button(probe_panel, 324, 248, 144, 60, LV_SYMBOL_DOWN " Probe", BUTTON_STYLE_SUCCESS, on_probe_panel);
+#else
     btn_probe_cancel = ui_widget_create_button(probe_panel, 12, 248, 200, 60, "Cancel", BUTTON_STYLE_DEFAULT, on_probe_panel);
     btn_probe_start = ui_widget_create_button(probe_panel, 268, 248, 200, 60, LV_SYMBOL_DOWN " Probe", BUTTON_STYLE_SUCCESS, on_probe_panel);
+#endif
 
     lv_obj_set_hidden(probe_panel, true);
 }
+
+#if TOOLSETTER_ENABLE
+
+static void tool_panel_create (lv_obj_t *parent)
+{
+    tool_panel = lv_obj_create(parent, NULL);
+    lv_obj_set_size(tool_panel, TFT_DISPLAY_WIDTH, TFT_DISPLAY_HEIGHT);
+    lv_obj_set_style(tool_panel, ui_widget_screen_style());
+
+    ui_widget_create_styled_label(tool_panel, 16, 14, &s_title, "Tool setter");
+    ui_widget_create_styled_label(tool_panel, 16, 50, &s_text, "Set: jog the bit a few mm above the setter.");
+    ui_widget_create_styled_label(tool_panel, 16, 74, &s_text, "Measure the first tool after Probe Z, later");
+    ui_widget_create_styled_label(tool_panel, 16, 98, &s_text, "tools get an offset and keep the same Z0.");
+
+    lbl_tool_input = ui_widget_create_styled_label(tool_panel, 16, 128, &s_probe_open, "");
+    txt_tool_input[0] = '\0';
+    lbl_tool_pos = ui_widget_create_styled_label(tool_panel, 16, 168, &s_text, "");
+    lbl_tool_ofs = ui_widget_create_styled_label(tool_panel, 16, 192, &s_text, "");
+    lbl_tool_status = ui_widget_create_styled_label(tool_panel, 16, 218, &s_text, "");
+
+    btn_tool_back = ui_widget_create_button(tool_panel, 12, 248, 144, 60, "Back", BUTTON_STYLE_DEFAULT, on_tool_panel);
+    btn_tool_set = ui_widget_create_button(tool_panel, 168, 248, 144, 60, "Set here", BUTTON_STYLE_DEFAULT, on_tool_panel);
+    lbl_tool_set = lv_obj_get_child(btn_tool_set, NULL);
+    txt_tool_set[0] = '\0';
+    btn_tool_measure = ui_widget_create_button(tool_panel, 324, 248, 144, 60, LV_SYMBOL_DOWN " Measure", BUTTON_STYLE_SUCCESS, on_tool_panel);
+
+    lv_obj_set_hidden(tool_panel, true);
+}
+
+static void tool_panel_update (void)
+{
+    char buf[64];
+
+    int8_t hit = ui_state.toolsetter_triggered;
+    if(hit != tool_shown) {
+        tool_shown = hit;
+        lv_label_set_style(lbl_tool_input, LV_LABEL_STYLE_MAIN, hit ? &s_probe_hit : &s_probe_open);
+        ui_widget_set_text(lbl_tool_input, txt_tool_input, sizeof(txt_tool_input),
+                            hit ? "Setter: triggered" : "Setter: open");
+    }
+
+    if(ui_state.tls_pos_set)
+        snprintf(buf, sizeof(buf), "At X %.1f  Y %.1f  Z %.1f (machine)",
+                  ui_state.tls_pos[0], ui_state.tls_pos[1], ui_state.tls_pos[2]);
+    else
+        strcpy(buf, "Position not set");
+    ui_widget_set_text(lbl_tool_pos, txt_tool_pos, sizeof(txt_tool_pos), buf);
+
+    if(ui_state.tlo_ref_set)
+        snprintf(buf, sizeof(buf), "Reference set, tool offset Z %.3f", ui_state.tlo_z);
+    else
+        strcpy(buf, "No reference yet (homing clears it)");
+    ui_widget_set_text(lbl_tool_ofs, txt_tool_ofs, sizeof(txt_tool_ofs), buf);
+
+    // Set here: orange while waiting for the second tap
+    if(tool_set_armed && lv_tick_elaps(tool_set_armed_at) > CONFIRM_MS)
+        tool_set_armed = false;
+
+    if(tool_set_armed != tool_set_shown) {
+        tool_set_shown = tool_set_armed;
+        ui_widget_set_button_style(btn_tool_set, tool_set_armed ? BUTTON_STYLE_WARNING : BUTTON_STYLE_DEFAULT);
+        ui_widget_set_text(lbl_tool_set, txt_tool_set, sizeof(txt_tool_set), tool_set_armed ? "Sure?" : "Set here");
+    }
+}
+
+#endif
 
 static void screen_create (lv_obj_t *parent)
 {
@@ -286,6 +417,9 @@ static void screen_create (lv_obj_t *parent)
     txt_pos[0] = '\0';
 
     probe_panel_create(parent);
+#if TOOLSETTER_ENABLE
+    tool_panel_create(parent);
+#endif
 
     last_update = 0;
 }
@@ -293,6 +427,9 @@ static void screen_create (lv_obj_t *parent)
 static void screen_show (void)
 {
     lv_obj_set_hidden(probe_panel, true);
+#if TOOLSETTER_ENABLE
+    lv_obj_set_hidden(tool_panel, true);
+#endif
     spindle_armed = false;
     spindle_shown = -1;
     last_update = 0;    // refresh now
@@ -345,6 +482,11 @@ static void screen_update (void)
                                 hit ? "Probe: touching" : "Probe: open, touch clip to plate");
         }
     }
+
+#if TOOLSETTER_ENABLE
+    if(!lv_obj_get_hidden(tool_panel))
+        tool_panel_update();
+#endif
 }
 
 void screen_jog_register (void)

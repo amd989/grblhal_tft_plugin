@@ -53,16 +53,35 @@
 #define CMD_CHAINED     0x01    // wait for idle after the previous command
 #define CMD_PROBE       0x02    // clear the probe result before sending
 #define CMD_NEEDS_PROBE 0x04    // drop the chain unless the last probe succeeded
+#define CMD_TOOLSETTER  0x08    // probe with the toolsetter input, not the touch plate
+
+// Steps of a tool measurement. Their lines need machine state (G59.3, the
+// last probe position, the work offset), so they are built when sent.
+typedef enum {
+    Cmd_Line = 0,       // send line as is
+    Cmd_TlsSafeZ,       // up to the Z home position
+    Cmd_TlsXY,          // over the toolsetter (G59.3 X Y)
+    Cmd_TlsZ,           // down to the G59.3 Z start height
+    Cmd_TlsProbeFast,   // probe down TFT_PROBE_DISTANCE from there
+    Cmd_TlsRetract,     // 2 mm above the fast probe hit
+    Cmd_TlsProbeSlow,   // slow probe down to 3 mm below the fast hit
+    Cmd_TlsOffset,      // first tool: $TLR, later tools: G43.1 Z<offset>
+    Cmd_TlsSetHere      // save the current machine position as G59.3
+} cmd_kind_t;
 
 typedef struct {
     uint32_t queued_at;     // not handed to grblHAL before this time
     uint8_t flags;
+    uint8_t kind;           // cmd_kind_t
     char line[TFT_CMD_MAX_LEN];
 } tft_cmd_t;
 
 static QueueHandle_t cmd_queue = NULL;
 static volatile bool drop_chain = false;
 static bool probe_done = true;          // the last probe sent has completed
+#if TOOLSETTER_ENABLE
+static bool toolsetter_selected = false;
+#endif
 static on_probe_completed_ptr on_probe_completed;
 static on_execute_realtime_ptr on_execute_realtime;
 
@@ -114,6 +133,105 @@ static bool get_net_status (network_info_t *info, network_flags_t flags, void *d
 
 #endif
 
+#if TOOLSETTER_ENABLE
+
+static float probe_mpos_z (void)
+{
+    return (float)sys.probe_position[Z_AXIS] / settings.axis[Z_AXIS].steps_per_mm;
+}
+
+// Machine Z to work Z, tool length offset included, for G38.2 targets
+static float work_z (float mpos)
+{
+    return mpos - gc_get_offset(Z_AXIS, true);
+}
+
+// Build the line for a tool measurement step. False drops the chain.
+static bool build_tls_line (tft_cmd_t *cmd)
+{
+    coord_data_t g59_3;
+    float pz = probe_mpos_z();
+
+    if(!settings_read_coord_data(CoordinateSystem_G59_3, &g59_3.values))
+        return false;
+
+    switch((cmd_kind_t)cmd->kind) {
+
+        case Cmd_TlsSafeZ:
+            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 Z%.3f", sys.home_position[Z_AXIS]);
+            break;
+
+        case Cmd_TlsXY:
+            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 X%.3f Y%.3f", g59_3.values[X_AXIS], g59_3.values[Y_AXIS]);
+            break;
+
+        case Cmd_TlsZ:
+            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 Z%.3f", g59_3.values[Z_AXIS]);
+            break;
+
+        case Cmd_TlsProbeFast:
+            snprintf(cmd->line, sizeof(cmd->line), "G21 G90 G38.2 Z%.3f F%d",
+                      work_z(g59_3.values[Z_AXIS] - TFT_PROBE_DISTANCE), TFT_PROBE_FEED);
+            break;
+
+        case Cmd_TlsRetract:
+            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 Z%.3f", pz + 2.0f);
+            break;
+
+        case Cmd_TlsProbeSlow:
+            snprintf(cmd->line, sizeof(cmd->line), "G21 G90 G38.2 Z%.3f F%d", work_z(pz - 3.0f), TFT_PROBE_FEED_SLOW);
+            break;
+
+        case Cmd_TlsOffset:
+            if(sys.tlo_reference_set.mask & bit(Z_AXIS))
+                snprintf(cmd->line, sizeof(cmd->line), "G21 G43.1 Z%.3f",
+                          (float)(sys.probe_position[Z_AXIS] - sys.tlo_reference[Z_AXIS]) / settings.axis[Z_AXIS].steps_per_mm);
+            else
+                strcpy(cmd->line, "$TLR");
+            break;
+
+        case Cmd_TlsSetHere:
+            {
+                float mpos[N_AXIS];
+                system_convert_array_steps_to_mpos(mpos, sys.position);
+                snprintf(cmd->line, sizeof(cmd->line), "G21 G10 L2 P9 X%.3f Y%.3f Z%.3f", mpos[X_AXIS], mpos[Y_AXIS], mpos[Z_AXIS]);
+            }
+            break;
+
+        default:
+            return false;
+    }
+
+    return true;
+}
+
+// Pick the probe input for the next G38: toolsetter or touch plate
+static void select_probe (bool toolsetter)
+{
+    if(hal.probe.select && toolsetter != toolsetter_selected) {
+        if(hal.probe.select(toolsetter ? Probe_Toolsetter : Probe_Default))
+            toolsetter_selected = toolsetter;
+    }
+}
+
+static void read_toolsetter_state (void)
+{
+    coord_data_t g59_3;
+
+    ui_state.toolsetter_triggered = hal.probe.is_triggered && hal.probe.is_triggered(Probe_Toolsetter);
+    ui_state.tls_homed = !!(sys.homed.mask & bit(Z_AXIS));
+    ui_state.tlo_ref_set = !!(sys.tlo_reference_set.mask & bit(Z_AXIS));
+    ui_state.tlo_z = gc_state.tool_length_offset[Z_AXIS];
+
+    if(settings_read_coord_data(CoordinateSystem_G59_3, &g59_3.values)) {
+        ui_state.tls_pos_set = g59_3.values[X_AXIS] != 0.0f || g59_3.values[Y_AXIS] != 0.0f || g59_3.values[Z_AXIS] != 0.0f;
+        for(uint_fast8_t idx = 0; idx < 3 && idx < N_AXIS; idx++)
+            ui_state.tls_pos[idx] = g59_3.values[idx];
+    }
+}
+
+#endif // TOOLSETTER_ENABLE
+
 /*
  * Runs in grblHAL's foreground loop. This is the only place the plugin touches
  * grblHAL state, so the UI task never calls into grblHAL directly:
@@ -160,6 +278,10 @@ static void tft_poll (sys_state_t state)
         ui_state_update_overrides(sys.override.feed_rate, sp ? sp->override_pct : 100);
         ui_state.probe_triggered = hal.probe.get_state && hal.probe.get_state().triggered;
 
+#if TOOLSETTER_ENABLE
+        read_toolsetter_state();
+#endif
+
 #if TFT_NET_STATUS
         static uint_fast8_t net_count = 0;
         if(++net_count >= 10) {     // once a second
@@ -188,9 +310,21 @@ static void tft_poll (sys_state_t state)
             xQueueReceive(cmd_queue, &cmd, 0);
             drop_chain = true;
             tft_log("cmd dropped, probe failed: %s", cmd.line);
-        } else {
+        }
+#if TOOLSETTER_ENABLE
+        else if(cmd.kind != Cmd_Line && !build_tls_line(&cmd)) {
+            xQueueReceive(cmd_queue, &cmd, 0);
+            drop_chain = true;
+            tft_log("cmd dropped, no G59.3");
+        }
+#endif
+        else {
             if(!chained)
                 drop_chain = false;     // a new chain starts
+#if TOOLSETTER_ENABLE
+            if(cmd.flags & CMD_PROBE)
+                select_probe(!!(cmd.flags & CMD_TOOLSETTER));
+#endif
             if(cmd.flags & CMD_PROBE)
                 sys.flags.probe_succeeded = Off;
             if(grbl.enqueue_gcode(cmd.line)) {
@@ -205,6 +339,14 @@ static void tft_poll (sys_state_t state)
             }
         }
     }
+
+#if TOOLSETTER_ENABLE
+    // Back to the touch plate once a tool measurement is over, so G38 from
+    // a host or a job does not probe with the toolsetter
+    if(toolsetter_selected && cmd_queue && uxQueueMessagesWaiting(cmd_queue) == 0 &&
+        (state_get() == STATE_IDLE || (state_get() & STATE_ALARM)))
+        select_probe(false);
+#endif
 
 #if TFT_DEBUG
     static bool announced = false;
@@ -261,7 +403,7 @@ static void send_rt (char c)
  * Lines are queued and passed to grblHAL from its own loop.
  */
 
-static void queue_command (const char *cmd, uint32_t delay_ms, uint8_t flags)
+static void queue_step (const char *cmd, uint32_t delay_ms, uint8_t flags, uint8_t kind)
 {
     tft_cmd_t c;
 
@@ -279,9 +421,15 @@ static void queue_command (const char *cmd, uint32_t delay_ms, uint8_t flags)
     if(*c.line) {
         c.queued_at = hal.get_elapsed_ticks() + delay_ms;
         c.flags = flags;
+        c.kind = kind;
         bool queued = xQueueSend(cmd_queue, &c, 0) == pdTRUE;
         tft_log("cmd %s: %s", queued ? "queued" : "DROPPED", c.line);
     }
+}
+
+static void queue_command (const char *cmd, uint32_t delay_ms, uint8_t flags)
+{
+    queue_step(cmd, delay_ms, flags, Cmd_Line);
 }
 
 void tft_send_command(const char *cmd) {
@@ -357,6 +505,34 @@ void tft_probe_z(float work_z) {
     queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G10 L20 P0 Z%.3f", plate);
     queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G0 Z%.3f", plate + TFT_PROBE_RETRACT);
 }
+
+#if TOOLSETTER_ENABLE
+
+/*
+ * Measure the tool on the toolsetter at G59.3: up to the Z home position,
+ * over the setter, down to the G59.3 Z, then a fast and a slow probe. The
+ * first measurement after homing sets the reference ($TLR), later ones set
+ * the tool length offset from it (G43.1), so Z zero on the work stays valid
+ * across tool changes. Ends back at the Z home position.
+ * The lines here are only names for the log, the real ones are built when sent.
+ */
+void tft_tool_measure(void) {
+    queue_step("safe Z", 0, 0, Cmd_TlsSafeZ);
+    queue_step("setter XY", 0, CMD_CHAINED, Cmd_TlsXY);
+    queue_step("setter Z", 0, CMD_CHAINED, Cmd_TlsZ);
+    queue_step("probe fast", 0, CMD_CHAINED|CMD_PROBE|CMD_TOOLSETTER, Cmd_TlsProbeFast);
+    queue_step("retract", 0, CMD_CHAINED|CMD_NEEDS_PROBE, Cmd_TlsRetract);
+    queue_step("probe slow", 0, CMD_CHAINED|CMD_PROBE|CMD_TOOLSETTER, Cmd_TlsProbeSlow);
+    queue_step("offset", 0, CMD_CHAINED|CMD_NEEDS_PROBE, Cmd_TlsOffset);
+    queue_step("safe Z", 0, CMD_CHAINED|CMD_NEEDS_PROBE, Cmd_TlsSafeZ);
+}
+
+// Save the current machine position as the toolsetter position (G59.3)
+void tft_toolsetter_set_here(void) {
+    queue_step("set G59.3", 0, 0, Cmd_TlsSetHere);
+}
+
+#endif
 
 void tft_frame(float min_x, float min_y, float max_x, float max_y) {
     const float corner[5][2] = {

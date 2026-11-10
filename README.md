@@ -5,7 +5,7 @@ A touchscreen user interface plugin for grblHAL using LVGL and TFT_eSPI.
 ## Features
 
 - Machine state with the alarm reason, work/machine position, Home, Unlock, Hold, Reset
-- Jogging, set work zero, go to zero, Z probe with a touch plate, spindle on/off
+- Jogging, set work zero, go to zero, Z probe with a touch plate, tool length measurement on a toolsetter, spindle on/off
 - SD card file browser and job screen: progress, elapsed time, feed and spindle overrides, hold and stop
 - Frame: trace the outline of a file's X/Y moves before running it
 - Wi-Fi or Ethernet status with the IP address on the main screen
@@ -52,11 +52,14 @@ The stock `BOARD_MKS_DLC32_V2P0` map gives the LCD header pins to grblHAL (aux o
 
 Differences from the stock map: the laser PWM stays on GPIO 32, there is no flood coolant output (it was on the backlight pin), no second spindle and no UART1. The board has no spindle enable or direction output, so grblHAL's are parked on unwired shift register bits.
 
-Cycle start is on J2 pin 4 (GPIO 4). With nothing wired it idles high, which grblHAL reports as an active input (`Pn:S`). Send `$14=4` to invert it, so the idle pin reads inactive and a normally open button to GND works. To make that the default after `$RST`, add to `my_machine.h`:
+J2 pin 4 (GPIO 4) is either cycle start or a toolsetter input:
 
-```c
-#define DEFAULT_CONTROL_SIGNALS_INVERT_MASK SIGNALS_CYCLESTART_BIT
-```
+- **Toolsetter** (`#define TOOLSETTER_ENABLE 1` in `my_machine.h`): a normally open switch from J2 pin 4 to GND, with the internal pull-up. Cycle start then has no pin. Check the input with `$pins` and the `T` in `Pn:` while pressing the switch. It is inverted by bit 1 (value 2) of `$6` and its pull-up is turned off by bit 1 of `$19`, with `DEFAULT_TOOLSETTER_SIGNAL_INVERT` and `DEFAULT_TOOLSETTER_SIGNAL_DISABLE_PULLUP` as defaults. Bit 0 of both stays the touch plate probe. Do not use GPIO 0 (J2 SDA) for an input, it is a boot strapping pin. Without a free input, a toolsetter can also be wired in parallel with the touch plate on the probe input.
+- **Cycle start** (default): with nothing wired it idles high, which grblHAL reports as an active input (`Pn:S`). Send `$14=4` to invert it, so the idle pin reads inactive and a normally open button to GND works. To make that the default after `$RST`, add to `my_machine.h`:
+
+  ```c
+  #define DEFAULT_CONTROL_SIGNALS_INVERT_MASK SIGNALS_CYCLESTART_BIT
+  ```
 
 ### Step 4: Enable Plugin
 
@@ -112,6 +115,10 @@ While a job runs, grblHAL ignores everything from the serial port except real-ti
 - Go XY0, Go Z0: jog to work zero, Stop cancels it. Go XY0 does not lift Z first.
 - Spindle: tap twice to start at `TFT_SPINDLE_RPM`, once to stop
 - Probe Z: touch plate probing. The panel shows the probe input live, so the clip can be checked first. It probes down at `TFT_PROBE_FEED` up to `TFT_PROBE_DISTANCE`, again slowly from 2 mm above, sets Z0 on the work surface and lifts `TFT_PROBE_RETRACT` above the plate. A failed probe, Stop or Reset drops the remaining steps, so no zero is set from a failed probe.
+- Tool setter (on the Probe Z panel, with `TOOLSETTER_ENABLE`): tool length measurement on a fixed toolsetter.
+  - Set here: jog the bit a few mm above the setter and tap twice. Saves the machine position as G59.3, the same place grblHAL's `$341` tool change modes use. Start high enough for longer tools: the probe goes down at most `TFT_PROBE_DISTANCE` from there.
+  - Measure: needs Z homed. Goes up to the Z home position, over the setter, down to the G59.3 Z, then probes fast and slow with the toolsetter input. The first measurement after homing sets the reference (`$TLR`); measure it right after Probe Z. Later tools get a tool length offset (`G43.1`) from that reference, so Z0 on the work stays valid. Homing clears the reference. A failed probe, Stop or Reset drops the remaining steps.
+  - The panel shows the setter input live, the saved position and the active offset. Probing goes back to the touch plate input when it is done.
 
 ## Network status
 

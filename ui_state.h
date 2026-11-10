@@ -71,6 +71,12 @@ typedef struct {
     uint8_t spindle_override;       // Spindle override percentage (10-200)
     bool probe_triggered;           // Probe input active (plate touched)
     char net_status[40];            // "Wi-Fi 192.168.1.20", "" without networking
+    bool toolsetter_triggered;      // Toolsetter input active
+    bool tls_pos_set;               // Toolsetter position (G59.3) is set
+    float tls_pos[3];               // Toolsetter position, machine X Y Z
+    bool tls_homed;                 // Z homed, needed to measure a tool
+    bool tlo_ref_set;               // Tool length reference taken
+    float tlo_z;                    // Active tool length offset, Z
 
     // Machine configuration
     uint8_t n_axis;                 // Number of axes (3-6)

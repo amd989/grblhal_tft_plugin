@@ -80,6 +80,15 @@ void tft_goto_zero_z(void);
 // current work Z. See TFT_PROBE_* in tft_config.h.
 void tft_probe_z(float work_z);
 
+#if TOOLSETTER_ENABLE
+// Measure the tool on the toolsetter at G59.3. The first measurement after
+// homing sets the reference ($TLR), later ones the tool length offset (G43.1).
+void tft_tool_measure(void);
+
+// Save the current machine position as the toolsetter position (G59.3)
+void tft_toolsetter_set_here(void);
+#endif
+
 // Trace a rectangle in work coordinates at the current Z, as jogs.
 // Stop (jog cancel) drops the rest.
 void tft_frame(float min_x, float min_y, float max_x, float max_y);

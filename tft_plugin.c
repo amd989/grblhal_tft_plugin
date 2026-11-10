@@ -43,7 +43,9 @@
 #include "screens/screen_files.h"
 #include "screens/screen_job.h"
 #include "screens/screen_macros.h"
+#include "screens/screen_settings.h"
 #include "tft_macros.h"
+#include "tft_settings.h"
 #include "tft_sd.h"
 #include "tft_touch.h"
 
@@ -59,7 +61,7 @@ static void tft_report_options(bool newopt) {
 
     // Report this plugin
     if(!newopt)
-        hal.stream.write("[PLUGIN:TFT UI v0.2]" ASCII_EOL);
+        hal.stream.write("[PLUGIN:TFT UI v" TFT_PLUGIN_VERSION "]" ASCII_EOL);
 }
 
 /*
@@ -118,8 +120,10 @@ static void tft_ui_task(void *param) {
     screen_files_register();
     screen_job_register();
     screen_macros_register();
+    screen_settings_register();
 
     uint32_t job_seq = tft_sd_job()->seq;
+    uint8_t brightness = 0;     // applied $456, 0 until the splash ends
 
     // Breathing effect during startup (2 seconds)
     uint32_t splash_count = 0;
@@ -152,16 +156,24 @@ static void tft_ui_task(void *param) {
             }
 
             // After splash, show main screen
-            if(splash_count == splash_duration - 1) {
-                tft_backlight_on(255);  // Breathing can stop at any level
+            if(splash_count == splash_duration - 1)
                 ui_screen_manager_show(SCREEN_MAIN);
+        } else {
+            // Brightness ($456): breathing stops at any level, so set it once
+            // the splash has ended, then on each change. The Settings screen
+            // sets the backlight itself while its slider is dragged.
+            if(brightness != tft_settings_brightness()) {
+                brightness = tft_settings_brightness();
+                tft_set_backlight((uint8_t)((uint32_t)brightness * 255 / 100));
             }
-        } else if(tft_touch_calibration_requested())
-            ui_screen_manager_show(SCREEN_CALIBRATE);
-        else if(tft_sd_job()->seq != job_seq) {
-            // An SD job started, from the screen or a host
-            job_seq = tft_sd_job()->seq;
-            ui_screen_manager_show(SCREEN_JOB);
+
+            if(tft_touch_calibration_requested())
+                ui_screen_manager_show(SCREEN_CALIBRATE);
+            else if(tft_sd_job()->seq != job_seq) {
+                // An SD job started, from the screen or a host
+                job_seq = tft_sd_job()->seq;
+                ui_screen_manager_show(SCREEN_JOB);
+            }
         }
 
         tft_beep_service();
@@ -206,6 +218,7 @@ void tft_plugin_init(void) {
     ui_state_init();
     tft_interface_init();
     tft_macros_init();
+    tft_settings_init();    // after the macros, keeps their NVS area in place
 
     // Create FreeRTOS UI task on Core 0
     xTaskCreatePinnedToCore(

@@ -47,6 +47,9 @@
 #ifndef TFT_BEEP_MS
 #define TFT_BEEP_MS             20      // Click length
 #endif
+#ifndef TFT_BRIGHTNESS
+#define TFT_BRIGHTNESS          100     // Default backlight, percent ($456)
+#endif
 #ifndef TFT_LED_ENABLE
 #define TFT_LED_ENABLE          1
 #endif

@@ -29,6 +29,7 @@
 #include "tft_interface.h"
 #include "ui_state.h"
 #include "tft_sd.h"
+#include "tft_settings.h"
 
 #if WIFI_ENABLE || ETHERNET_ENABLE
 #include "networking/networking.h"
@@ -127,8 +128,9 @@ static bool get_net_status (network_info_t *info, network_flags_t flags, void *d
     else
         snprintf(buf, sizeof(buf), "%s not connected", name);
 
-    // Short string, a torn read in the UI task only garbles one refresh
+    // Short strings, a torn read in the UI task only garbles one refresh
     strcpy(ui_state.net_status, buf);
+    strncpy(ui_state.hostname, info->status.hostname, sizeof(ui_state.hostname) - 1);
 
     return true;
 }
@@ -299,6 +301,7 @@ static void tft_poll (sys_state_t state)
     }
 
     tft_sd_poll();
+    tft_settings_poll();
     laser_test_service();
 
     tft_cmd_t cmd;
@@ -713,6 +716,9 @@ static uint32_t beep_off_at;
 static bool beeping = false;
 
 void tft_beep(void) {
+    if(!tft_settings_beep())
+        return;
+
     DIGITAL_OUT(TFT_BEEP_PIN, 1);
     beep_off_at = hal.get_elapsed_ticks() + TFT_BEEP_MS;
     beeping = true;

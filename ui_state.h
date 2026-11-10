@@ -40,6 +40,7 @@ typedef enum {
     SCREEN_FILE_INFO,       // File information dialog
     SCREEN_CALIBRATE,       // Touch calibration
     SCREEN_MACROS,          // Macro buttons
+    SCREEN_SETTINGS,        // Brightness, beep, touch calibration, info
     SCREEN_COUNT            // Total number of screens
 } ui_screen_t;
 
@@ -72,6 +73,7 @@ typedef struct {
     uint8_t spindle_override;       // Spindle override percentage (10-200)
     bool probe_triggered;           // Probe input active (plate touched)
     char net_status[40];            // "Wi-Fi 192.168.1.20", "" without networking
+    char hostname[33];              // network hostname, "" without networking
     bool laser_mode;                // $32=1 and the spindle is a PWM laser
     float spindle_max;              // $30, S for 100% laser power
     bool z_homed;                   // Z homed: tool measurement and resume move to the Z home position

@@ -10,6 +10,8 @@
 #ifndef _TFT_PLUGIN_H_
 #define _TFT_PLUGIN_H_
 
+#define TFT_PLUGIN_VERSION "0.2"    // reported as [PLUGIN:TFT UI v...]
+
 #ifdef __cplusplus
 extern "C" {
 #endif

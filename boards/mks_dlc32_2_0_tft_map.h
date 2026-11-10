@@ -122,6 +122,9 @@
 #endif
 
 // Define user-control controls (cycle start, reset, feed hold) input pins.
+// Cycle start idles high with nothing on J2, which grblHAL reads as active
+// (Pn:S). Set $14=4 to invert it, or DEFAULT_CONTROL_SIGNALS_INVERT_MASK in
+// my_machine.h. A board map is read too late to change that default.
 #if (CONTROL_ENABLE & CONTROL_CYCLE_START) && defined(AUXINPUT1_PIN)
 #define CYCLE_START_PIN         AUXINPUT1_PIN
 #endif

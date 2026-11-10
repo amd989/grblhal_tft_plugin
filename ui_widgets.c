@@ -6,8 +6,8 @@
  * Copyright (c) 2025
  */
 
+#include "tft_config.h"    // first, so my_machine.h comes before grblHAL config.h
 #include "ui_widgets.h"
-#include "tft_config.h"
 #include <stdio.h>
 #include <string.h>
 

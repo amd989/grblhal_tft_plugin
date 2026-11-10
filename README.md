@@ -53,6 +53,12 @@ The stock `BOARD_MKS_DLC32_V2P0` map gives the LCD header pins to grblHAL (aux o
 
 Differences from the stock map: the laser PWM stays on GPIO 32, there is no flood coolant output (it was on the backlight pin), no second spindle and no UART1. The board has no spindle enable or direction output, so grblHAL's are parked on unwired shift register bits.
 
+Cycle start is on J2 pin 4 (GPIO 4). With nothing wired it idles high, which grblHAL reports as an active input (`Pn:S`). Send `$14=4` to invert it, so the idle pin reads inactive and a normally open button to GND works. To make that the default after `$RST`, add to `my_machine.h`:
+
+```c
+#define DEFAULT_CONTROL_SIGNALS_INVERT_MASK SIGNALS_CYCLESTART_BIT
+```
+
 ### Step 4: Enable Plugin
 
 Edit `main/my_machine.h`:

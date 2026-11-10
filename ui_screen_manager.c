@@ -6,8 +6,8 @@
  * Copyright (c) 2025
  */
 
+#include "tft_config.h"    // first, so my_machine.h comes before grblHAL config.h
 #include "ui_screen_manager.h"
-#include "tft_config.h"
 #include <string.h>
 
 // Screen registry (static array for all possible screens)

@@ -49,26 +49,6 @@ void tft_backlight_off(void);
 bool tft_backlight_breathing(void);
 
 /*
- * Beeper Control
- */
-
-#if TFT_BEEP_ENABLE
-
-// Initialize beeper
-void tft_beeper_init(void);
-
-// Turn beeper on
-void tft_beeper_on(void);
-
-// Turn beeper off
-void tft_beeper_off(void);
-
-// Quick beep for touch feedback (non-blocking)
-void tft_beep_touch(void);
-
-#endif // TFT_BEEP_ENABLE
-
-/*
  * Display Information
  */
 

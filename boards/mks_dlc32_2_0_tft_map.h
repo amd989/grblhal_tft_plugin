@@ -110,11 +110,8 @@
 #define SPINDLE_DIRECTION_PIN   I2SO(9)
 #endif
 
-// Define flood and mist coolant enable output pins.
-// Flood was on GPIO 5 (LCD backlight) in the stock map, so it is not available.
-#if COOLANT_ENABLE & COOLANT_MIST
-#define COOLANT_MIST_PIN    I2SO(7)     // Beeper
-#endif
+// No coolant outputs. Flood was on GPIO 5 (LCD backlight) in the stock map,
+// and mist on I2SO(7), the beeper, which the TFT plugin uses for touch clicks.
 
 #define AUXINPUT0_PIN       GPIO_NUM_22
 #if !I2C_ENABLE

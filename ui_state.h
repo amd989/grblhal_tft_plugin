@@ -70,6 +70,7 @@ typedef struct {
     uint8_t feed_override;          // Feed override percentage (10-200)
     uint8_t spindle_override;       // Spindle override percentage (10-200)
     bool probe_triggered;           // Probe input active (plate touched)
+    char net_status[40];            // "Wi-Fi 192.168.1.20", "" without networking
 
     // Machine configuration
     uint8_t n_axis;                 // Number of axes (3-6)

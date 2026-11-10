@@ -42,7 +42,10 @@
 
 // Features
 #ifndef TFT_BEEP_ENABLE
-#define TFT_BEEP_ENABLE         0       // Needs grblHAL I2S output integration, off for now
+#define TFT_BEEP_ENABLE         1       // Click on each touch
+#endif
+#ifndef TFT_BEEP_MS
+#define TFT_BEEP_MS             20      // Click length
 #endif
 #ifndef TFT_LED_ENABLE
 #define TFT_LED_ENABLE          1
@@ -145,8 +148,11 @@
 #define TFT_BL_PWM_BITS         10          // 0-1023
 #endif
 
-// Beeper (via I2S GPIO expansion), only used when TFT_BEEP_ENABLE is 1
-// #define TFT_BEEP_PIN         I2SO(7)
+// Beeper output, a shift register bit on the DLC32. The plugin board map
+// leaves it free (the stock map used it for mist coolant).
+#ifndef TFT_BEEP_PIN
+#define TFT_BEEP_PIN            I2SO(7)
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -191,12 +197,6 @@ extern "C" {
 #else
     #define TFT_BACKLIGHT_ON(duty)  ledcWrite(TFT_BACKLIGHT_CHANNEL, (duty))
     #define TFT_BACKLIGHT_OFF()     ledcWrite(TFT_BACKLIGHT_CHANNEL, 0)
-#endif
-
-// Beeper Configuration
-#if TFT_BEEP_ENABLE
-    #define TFT_BEEPER_PIN      TFT_BEEP_PIN
-    // Beeper macros will be defined in tft_driver.h
 #endif
 
 // Touch Controller: XPT2046

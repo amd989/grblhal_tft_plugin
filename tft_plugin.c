@@ -141,6 +141,8 @@ static void tft_ui_task(void *param) {
             ui_screen_manager_show(SCREEN_JOB);
         }
 
+        tft_beep_service();
+
         // Update screen manager (calls current screen's update callback)
         ui_screen_manager_update();
 

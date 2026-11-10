@@ -29,13 +29,13 @@
 #define DRO_AXES        (N_AXIS < 3 ? N_AXIS : 3)
 #define UPDATE_MS       100
 
-static lv_style_t s_axis, s_value, s_reason;
+static lv_style_t s_axis, s_value, s_reason, s_net;
 
-static lv_obj_t *lbl_state, *lbl_reason, *lbl_coord, *lbl_hold;
+static lv_obj_t *lbl_state, *lbl_reason, *lbl_coord, *lbl_hold, *lbl_net;
 static lv_obj_t *lbl_value[DRO_AXES];
 
 // Last shown text, so labels are only redrawn when they change
-static char txt_state[24], txt_reason[48], txt_coord[8], txt_hold[8];
+static char txt_state[24], txt_reason[48], txt_coord[8], txt_hold[8], txt_net[40];
 static char txt_value[DRO_AXES][16];
 static uint32_t last_update;
 
@@ -48,6 +48,10 @@ static void styles_init (void)
     lv_style_copy(&s_value, &lv_style_plain);
     s_value.text.font = UI_FONT_XLARGE;
     s_value.text.color = UI_COLOR_TEXT;
+
+    lv_style_copy(&s_net, &lv_style_plain);
+    s_net.text.font = UI_FONT_MEDIUM;
+    s_net.text.color = UI_COLOR_TEXT_DIM;
 
     lv_style_copy(&s_reason, &lv_style_plain);
     s_reason.text.font = UI_FONT_MEDIUM;
@@ -158,6 +162,10 @@ static void screen_create (lv_obj_t *parent)
         txt_value[idx][0] = '\0';
     }
 
+    // Network status, empty without Wi-Fi/Ethernet support
+    lbl_net = ui_widget_create_styled_label(parent, 16, 222, &s_net, "");
+    txt_net[0] = '\0';
+
     // Controls
     ui_widget_create_button(parent, 12, 248, 105, 60, "Home", BUTTON_STYLE_PRIMARY, on_home);
     ui_widget_create_button(parent, 129, 248, 105, 60, "Unlock", BUTTON_STYLE_DEFAULT, on_unlock);
@@ -194,6 +202,7 @@ static void screen_update (void)
     }
 
     ui_widget_set_text(lbl_reason, txt_reason, sizeof(txt_reason), ui_state_get_alarm_string());
+    ui_widget_set_text(lbl_net, txt_net, sizeof(txt_net), ui_state.net_status);
 
     // Position
     float *pos = ui_state.coord_mode == COORD_MODE_WORK ? ui_state.work_position : ui_state.machine_position;

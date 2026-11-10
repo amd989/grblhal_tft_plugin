@@ -30,6 +30,13 @@
 #include "ui_state.h"
 #include "tft_sd.h"
 
+#if WIFI_ENABLE || ETHERNET_ENABLE
+#include "networking/networking.h"
+#define TFT_NET_STATUS 1
+#else
+#define TFT_NET_STATUS 0
+#endif
+
 // How often the UI state cache is refreshed from grblHAL, in ms.
 #define TFT_POLL_INTERVAL_MS    100
 #define TFT_CMD_QUEUE_LEN       8
@@ -86,6 +93,27 @@ void tft_log (const char *fmt, ...)
 }
 #endif
 
+#if TFT_NET_STATUS
+
+// First network interface: Wi-Fi station, access point or Ethernet
+static bool get_net_status (network_info_t *info, network_flags_t flags, void *data)
+{
+    char buf[sizeof(ui_state.net_status)];
+    const char *name = info->is_ethernet ? "Ethernet" : info->wifi_mode == WiFiMode_AP ? "Wi-Fi AP" : "Wi-Fi";
+
+    if(info->link_up && *info->status.ip)
+        snprintf(buf, sizeof(buf), "%s %s", name, info->status.ip);
+    else
+        snprintf(buf, sizeof(buf), "%s not connected", name);
+
+    // Short string, a torn read in the UI task only garbles one refresh
+    strcpy(ui_state.net_status, buf);
+
+    return true;
+}
+
+#endif
+
 /*
  * Runs in grblHAL's foreground loop. This is the only place the plugin touches
  * grblHAL state, so the UI task never calls into grblHAL directly:
@@ -131,6 +159,14 @@ static void tft_poll (sys_state_t state)
         ui_state_update_feed_spindle(st_get_realtime_rate(), sp && sp->state.on ? sp->rpm_overridden : 0.0f);
         ui_state_update_overrides(sys.override.feed_rate, sp ? sp->override_pct : 100);
         ui_state.probe_triggered = hal.probe.get_state && hal.probe.get_state().triggered;
+
+#if TFT_NET_STATUS
+        static uint_fast8_t net_count = 0;
+        if(++net_count >= 10) {     // once a second
+            net_count = 0;
+            networking_enumerate_interfaces(get_net_status, NULL);
+        }
+#endif
     }
 
     tft_sd_poll();
@@ -322,6 +358,15 @@ void tft_probe_z(float work_z) {
     queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G0 Z%.3f", plate + TFT_PROBE_RETRACT);
 }
 
+void tft_frame(float min_x, float min_y, float max_x, float max_y) {
+    const float corner[5][2] = {
+        { min_x, min_y }, { max_x, min_y }, { max_x, max_y }, { min_x, max_y }, { min_x, min_y }
+    };
+
+    for(uint_fast8_t idx = 0; idx < 5; idx++)
+        queue_fmt(idx ? CMD_CHAINED : 0, "$J=G90 G21 X%.3f Y%.3f F%d", corner[idx][0], corner[idx][1], TFT_JOG_FEED);
+}
+
 void tft_spindle(bool on) {
     if(on)
         tft_send_command_fmt("M3 S%d", TFT_SPINDLE_RPM);
@@ -396,6 +441,31 @@ void tft_reset(void) {
     drop_chain = true;
     send_rt(CMD_RESET);
 }
+
+#if TFT_BEEP_ENABLE
+
+static uint32_t beep_off_at;
+static bool beeping = false;
+
+void tft_beep(void) {
+    DIGITAL_OUT(TFT_BEEP_PIN, 1);
+    beep_off_at = hal.get_elapsed_ticks() + TFT_BEEP_MS;
+    beeping = true;
+}
+
+void tft_beep_service(void) {
+    if(beeping && (int32_t)(hal.get_elapsed_ticks() - beep_off_at) >= 0) {
+        DIGITAL_OUT(TFT_BEEP_PIN, 0);
+        beeping = false;
+    }
+}
+
+#else
+
+void tft_beep(void) {}
+void tft_beep_service(void) {}
+
+#endif
 
 // dir > 0: +10%, dir < 0: -10%, 0: back to 100%
 void tft_feed_override(int8_t dir) {

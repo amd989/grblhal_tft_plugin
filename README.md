@@ -7,9 +7,9 @@ A touchscreen user interface plugin for grblHAL using LVGL and TFT_eSPI.
 - Machine state with the alarm reason, work/machine position, Home, Unlock, Hold, Reset
 - Jogging, set work zero, go to zero, Z probe with a touch plate, spindle on/off
 - SD card file browser and job screen: progress, elapsed time, feed and spindle overrides, hold and stop
-- Touch calibration (`$TFTCAL`), saved across resets
-
-Planned: job outline (frame), Wi-Fi status.
+- Frame: trace the outline of a file's X/Y moves before running it
+- Wi-Fi or Ethernet status with the IP address on the main screen
+- Touch calibration (`$TFTCAL`), saved across resets, and a click on each touch
 
 ## Hardware Requirements
 
@@ -101,6 +101,8 @@ Tapping a file asks for confirmation, then runs it with `$F=<path>` from the cur
 
 While a job runs, grblHAL ignores everything from the serial port except real-time commands (`?`, `!`, `~` and overrides), so a host like CNCjs can watch, hold and resume, but not send G-code.
 
+**Frame** on the confirm panel reads the file for the X/Y extent of its moves (absolute and relative, mm and inch, arcs at their true extent; G53, G92, G10, G28/G30 and probing lines are left out) and traces that rectangle as jogs at the current Z, so raise Z first. Stop on the jog screen cancels the rest of the trace.
+
 `examples/tft-test-air.nc` is a safe first job: ten 20 mm squares in X/Y with relative moves and the spindle off. Jog to the middle of the bed and raise Z before running it.
 
 ## Jog screen
@@ -110,6 +112,18 @@ While a job runs, grblHAL ignores everything from the serial port except real-ti
 - Go XY0, Go Z0: jog to work zero, Stop cancels it. Go XY0 does not lift Z first.
 - Spindle: tap twice to start at `TFT_SPINDLE_RPM`, once to stop
 - Probe Z: touch plate probing. The panel shows the probe input live, so the clip can be checked first. It probes down at `TFT_PROBE_FEED` up to `TFT_PROBE_DISTANCE`, again slowly from 2 mm above, sets Z0 on the work surface and lifts `TFT_PROBE_RETRACT` above the plate. A failed probe, Stop or Reset drops the remaining steps, so no zero is set from a failed probe.
+
+## Network status
+
+With `WIFI_ENABLE` (or `ETHERNET_ENABLE`) the main screen shows the first interface, for example `Wi-Fi 192.168.1.42` or `Wi-Fi not connected`. Set the network with `$74=<SSID>` and `$75=<password>`, then reset.
+
+The ESP32 driver's `platformio.ini` defines `NETWORK_STA_HOSTNAME` unquoted, which breaks the build once Wi-Fi is enabled. Comment that line out or quote the value.
+
+## Touch beep
+
+The DLC32 beeper sits on shift register output `I2SO(7)`. The plugin clicks it for `TFT_BEEP_MS` on each touch; set `TFT_BEEP_ENABLE 0` to turn it off. The stock map used that output for mist coolant, the plugin map leaves the board without coolant outputs.
+
+## Jog screen probe settings
 
 Set the plate thickness in `my_machine.h`, it defaults to 0:
 

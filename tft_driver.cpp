@@ -48,11 +48,6 @@ void tft_driver_init(void) {
 
     // Give display time to settle
     delay(100);
-
-#if TFT_BEEP_ENABLE
-    // Initialize beeper
-    tft_beeper_init();
-#endif
 }
 
 /*
@@ -103,37 +98,6 @@ bool tft_backlight_breathing(void) {
     tft_set_backlight(backlight_state.breathing_value);
     return false;
 }
-
-/*
- * Beeper Control Functions
- */
-
-#if TFT_BEEP_ENABLE
-
-void tft_beeper_init(void) {
-    // Beeper is on I2S GPIO expansion
-    // Initialization handled by driver.c I2S setup
-    // Just ensure pin mode is set
-    pinMode(TFT_BEEPER_PIN, OUTPUT);
-    tft_beeper_off();
-}
-
-void tft_beeper_on(void) {
-    digitalWrite(TFT_BEEPER_PIN, HIGH);
-}
-
-void tft_beeper_off(void) {
-    digitalWrite(TFT_BEEPER_PIN, LOW);
-}
-
-void tft_beep_touch(void) {
-    // Quick beep for touch feedback
-    // This is called from touch callback
-    // Actual timing controlled by LVGL/touch driver
-    tft_beeper_on();
-}
-
-#endif // TFT_BEEP_ENABLE
 
 /*
  * Display Information

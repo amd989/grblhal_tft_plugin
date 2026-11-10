@@ -15,6 +15,8 @@
 #include "lvgl_init.h"
 #include "tft_touch.h"
 
+extern "C" void tft_beep(void);    // tft_interface.c
+
 #if TFT_ENABLE
 
 // External TFT_eSPI instance (from tft_driver.c)
@@ -95,6 +97,12 @@ static bool lvgl_touch_read(lv_indev_drv_t *indev, lv_indev_data_t *data) {
     // Calibrated screen coordinates, clamped to the display
     bool touched = tft_touch_read(&touchX, &touchY);
 
+    // Click when a touch starts
+    static bool was_pressed = false;
+    if(touched && !was_pressed)
+        tft_beep();
+    was_pressed = touched;
+
 #if TFT_DEBUG
     static bool was_touched = false;
     if(touched != was_touched) {
@@ -134,10 +142,6 @@ static bool lvgl_touch_read(lv_indev_drv_t *indev, lv_indev_data_t *data) {
         data->point.y = last_y;
         data->state = LV_INDEV_STATE_PR;  // Pressed
 
-#if TFT_BEEP_ENABLE
-        // Haptic feedback via beeper
-        tft_beeper_on();
-#endif
     }
     else {
         // Touch released
@@ -145,10 +149,6 @@ static bool lvgl_touch_read(lv_indev_drv_t *indev, lv_indev_data_t *data) {
         data->point.y = last_y;
         data->state = LV_INDEV_STATE_REL;  // Released
 
-#if TFT_BEEP_ENABLE
-        // Turn off beeper
-        tft_beeper_off();
-#endif
     }
 
     // Return false to indicate no more data to read

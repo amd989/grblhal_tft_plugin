@@ -40,15 +40,16 @@ static lv_style_t s_title, s_name, s_dim, s_msg, s_big;
 
 static lv_obj_t *lbl_title, *lbl_msg, *lbl_page, *btn_back, *btn_reload, *btn_up, *btn_down;
 static lv_obj_t *btn_row[ROWS], *lbl_row_name[ROWS], *lbl_row_size[ROWS];
-static lv_obj_t *confirm, *lbl_confirm_name, *lbl_confirm_info, *lbl_confirm_status, *btn_start, *btn_cancel;
+static lv_obj_t *confirm, *lbl_confirm_name, *lbl_confirm_info, *lbl_confirm_status, *btn_start, *btn_cancel, *btn_frame;
 
 static char path[TFT_SD_PATH_LEN] = "/";
 static char selected[TFT_SD_PATH_LEN + TFT_SD_NAME_LEN + 1];
 static uint32_t listing_seq;        // seq of the listing shown
 static bool waiting;                // listing requested, not here yet
 static uint_fast8_t page;
-static uint32_t start_seq, start_at;
-static bool starting;
+static uint32_t start_seq, start_at, scan_seq;
+static bool starting, framing;
+static int16_t scan_shown;
 
 static void styles_init (void)
 {
@@ -142,16 +143,16 @@ static void show_page (void)
 
 static void show_confirm (const tft_sd_entry_t *e)
 {
-    char size[16], info[64];
+    char size[16], info[96];
 
     format_size(size, sizeof(size), e->size);
-    snprintf(info, sizeof(info), "%s, runs from the current work zero", size);
+    snprintf(info, sizeof(info), "%s, from the current work zero. Frame traces at the current Z.", size);
 
     lv_label_set_text(lbl_confirm_name, e->name);
     lv_label_set_text(lbl_confirm_info, info);
     lv_label_set_text(lbl_confirm_status, "");
     lv_obj_set_hidden(btn_start, false);
-    starting = false;
+    starting = framing = false;
     lv_obj_set_hidden(confirm, false);
 }
 
@@ -221,8 +222,18 @@ static void on_confirm (lv_obj_t *obj, lv_event_t event)
         return;
 
     if(obj == btn_cancel) {
-        starting = false;
+        starting = framing = false;
         lv_obj_set_hidden(confirm, true);
+    } else if(obj == btn_frame && !framing && !starting) {
+        if(ui_state.system_state != STATE_IDLE)
+            lv_label_set_text(lbl_confirm_status, "Machine must be idle");
+        else {
+            framing = true;
+            scan_shown = -1;
+            scan_seq = tft_sd_bounds()->seq;
+            tft_sd_scan(selected, ui_state.work_position[X_AXIS], ui_state.work_position[Y_AXIS]);
+            lv_label_set_text(lbl_confirm_status, "Reading file...");
+        }
     } else if(obj == btn_start && !starting) {
         if(ui_state.system_state != STATE_IDLE)
             lv_label_set_text(lbl_confirm_status, "Machine must be idle");
@@ -298,10 +309,13 @@ static void screen_create (lv_obj_t *parent)
     lv_obj_set_width(lbl_confirm_name, 448);
 
     lbl_confirm_info = ui_widget_create_styled_label(confirm, 16, 110, &s_dim, "");
-    lbl_confirm_status = ui_widget_create_styled_label(confirm, 16, 150, &s_title, "");
+    lv_label_set_long_mode(lbl_confirm_info, LV_LABEL_LONG_BREAK);
+    lv_obj_set_width(lbl_confirm_info, 448);
+    lbl_confirm_status = ui_widget_create_styled_label(confirm, 16, 170, &s_title, "");
 
-    btn_cancel = ui_widget_create_button(confirm, 12, 248, 200, 60, "Cancel", BUTTON_STYLE_DEFAULT, on_confirm);
-    btn_start = ui_widget_create_button(confirm, 268, 248, 200, 60, LV_SYMBOL_PLAY " Start", BUTTON_STYLE_SUCCESS, on_confirm);
+    btn_cancel = ui_widget_create_button(confirm, 12, 248, 140, 60, "Cancel", BUTTON_STYLE_DEFAULT, on_confirm);
+    btn_frame = ui_widget_create_button(confirm, 170, 248, 140, 60, "Frame", BUTTON_STYLE_PRIMARY, on_confirm);
+    btn_start = ui_widget_create_button(confirm, 328, 248, 140, 60, LV_SYMBOL_PLAY " Start", BUTTON_STYLE_SUCCESS, on_confirm);
 
     lv_obj_set_hidden(confirm, true);
 
@@ -325,6 +339,30 @@ static void screen_update (void)
         // Keep the folder grblHAL actually listed
         strcpy(path, list->path);
         show_page();
+    }
+
+    if(framing) {
+        const tft_sd_bounds_t *b = tft_sd_bounds();
+        char buf[64];
+
+        if(b->seq == scan_seq) {
+            if(b->progress != scan_shown) {
+                scan_shown = b->progress;
+                snprintf(buf, sizeof(buf), "Reading file %u%%", (unsigned)b->progress);
+                lv_label_set_text(lbl_confirm_status, buf);
+            }
+        } else {
+            framing = false;
+            if(!b->ok)
+                lv_label_set_text(lbl_confirm_status, "No X/Y moves found");
+            else if(ui_state.system_state != STATE_IDLE)
+                lv_label_set_text(lbl_confirm_status, "Machine must be idle");
+            else {
+                snprintf(buf, sizeof(buf), "X %.1f to %.1f   Y %.1f to %.1f", b->min_x, b->max_x, b->min_y, b->max_y);
+                lv_label_set_text(lbl_confirm_status, buf);
+                tft_frame(b->min_x, b->min_y, b->max_x, b->max_y);
+            }
+        }
     }
 
     if(starting && tft_sd_job()->seq == start_seq && lv_tick_elaps(start_at) > START_WAIT_MS) {

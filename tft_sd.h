@@ -56,6 +56,13 @@ typedef struct {
     uint32_t elapsed_ms;            // since the job started, or total once ended
 } tft_sd_job_t;
 
+typedef struct {
+    volatile uint32_t seq;          // incremented when a scan is complete
+    bool ok;                        // X/Y moves found
+    uint8_t progress;               // percent read while scanning
+    float min_x, min_y, max_x, max_y;   // work coordinates, mm
+} tft_sd_bounds_t;
+
 /*
  * UI task
  */
@@ -71,6 +78,13 @@ bool tft_sd_run(const char *path);
 
 // Current or last job
 const tft_sd_job_t *tft_sd_job(void);
+
+// Find the X/Y extents of a file's moves. Relative moves are taken from
+// x, y, the current work position. Read a bit at a time in grblHAL's loop.
+void tft_sd_scan(const char *path, float x, float y);
+
+// Last completed scan, progress of the current one
+const tft_sd_bounds_t *tft_sd_bounds(void);
 
 /*
  * grblHAL loop (tft_interface.c)

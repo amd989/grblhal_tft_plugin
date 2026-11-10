@@ -80,6 +80,10 @@ void tft_goto_zero_z(void);
 // current work Z. See TFT_PROBE_* in tft_config.h.
 void tft_probe_z(float work_z);
 
+// Trace a rectangle in work coordinates at the current Z, as jogs.
+// Stop (jog cancel) drops the rest.
+void tft_frame(float min_x, float min_y, float max_x, float max_y);
+
 // Spindle on at TFT_SPINDLE_RPM (M3), or off (M5)
 void tft_spindle(bool on);
 
@@ -107,6 +111,10 @@ void tft_stop(void);
 
 // Soft reset
 void tft_reset(void);
+
+// Touch click: tft_beep() starts it, tft_beep_service() from the UI loop ends it
+void tft_beep(void);
+void tft_beep_service(void);
 
 // Feed and spindle overrides: dir > 0 +10%, dir < 0 -10%, 0 back to 100%
 void tft_feed_override(int8_t dir);

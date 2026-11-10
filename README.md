@@ -119,6 +119,18 @@ With `WIFI_ENABLE` (or `ETHERNET_ENABLE`) the main screen shows the first interf
 
 The ESP32 driver's `platformio.ini` defines `NETWORK_STA_HOSTNAME` unquoted, which breaks the build once Wi-Fi is enabled. Comment that line out or quote the value.
 
+### WebUI and mDNS (driver options, not part of this plugin)
+
+Tested on the DLC32 alongside the TFT:
+
+- `WEBUI_ENABLE 3` in `my_machine.h` adds ESP3D-WebUI v3. Put its `index.html.gz` ([ESP3D-WEBUI 3.0, dist/CNC/GRBLHal](https://github.com/luc-github/ESP3D-WEBUI/tree/3.0/dist/CNC/GRBLHal)) on the SD card as `/www/index.html.gz`. Free memory drops to about 84 KB.
+- `-DMDNS_ENABLE=1` in `platformio.ini` build flags (not `my_machine.h`) makes the board answer as `grblhal.local`.
+- Network services `$70=47`: telnet, websocket, HTTP, FTP and mDNS.
+- `$326` is the HTTP port (80) and `$327` the websocket port (81). With both on 80 the websocket daemon answers every page with 400 Bad Request.
+- grblHAL's FTP server cannot change directory; store with a full path, e.g. `STOR /www/index.html.gz`.
+
+The WebUI, telnet and USB share one command stream: the last one to connect takes it over.
+
 ## Touch beep
 
 The DLC32 beeper sits on shift register output `I2SO(7)`. The plugin clicks it for `TFT_BEEP_MS` on each touch; set `TFT_BEEP_ENABLE 0` to turn it off. The stock map used that output for mist coolant, the plugin map leaves the board without coolant outputs.

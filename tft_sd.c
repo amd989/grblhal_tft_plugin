@@ -15,6 +15,7 @@
 #include "grbl/hal.h"
 #include "grbl/vfs.h"
 #include "grbl/stream_file.h"
+#include "grbl/planner.h"
 
 #if (FS_ENABLE & FS_SDCARD)
 #include "sdcard/sdcard.h"
@@ -154,19 +155,32 @@ static void update_job (void)
     if(info) {
         if(!job.active) {
             job.active = true;
+            job.finished = false;
             job.seq++;
             started_at = now;
             strncpy(job.name, info->name, sizeof(job.name) - 1);
             job.name[sizeof(job.name) - 1] = '\0';
             tft_log("job started: %s", job.name);
         }
+        uint32_t queued = plan_get_buffer_size() - plan_get_block_buffer_available();
+
         job.size = info->size;
         job.pos = info->pos;
         job.line = info->line;
+        job.line_done = info->line > queued ? info->line - queued : 0;
+        job.pos_done = info->line ? (uint32_t)((uint64_t)info->pos * job.line_done / info->line) : 0;
         job.elapsed_ms = now - started_at;
     } else if(job.active) {
-        job.active = false;
         job.elapsed_ms = now - started_at;
+        // A finished job waits for the motion buffer to empty before it ends,
+        // a stopped one ends with moves still buffered
+        job.finished = job.size && job.pos >= job.size && job.line_done >= job.line;
+        if(job.finished) {
+            job.pos_done = job.size;
+            job.line_done = job.line;
+        }
+        __sync_synchronize();   // the UI reads the result once active is false
+        job.active = false;
         tft_log("job ended at line %u", (unsigned)job.line);
     }
 }

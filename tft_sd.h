@@ -46,7 +46,13 @@ typedef struct {
     char name[50];
     uint32_t size;
     uint32_t pos;                   // bytes read
-    uint32_t line;
+    uint32_t line;                  // lines read
+    // grblHAL reads up to a full motion buffer (100 moves) ahead, so the
+    // executed part is estimated by taking the buffered moves off. Arcs fill
+    // the buffer with many moves, then this lags behind a little.
+    uint32_t line_done;
+    uint32_t pos_done;
+    bool finished;                  // ended after running to the end, not stopped
     uint32_t elapsed_ms;            // since the job started, or total once ended
 } tft_sd_job_t;
 

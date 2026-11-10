@@ -201,7 +201,7 @@ static void screen_update (void)
     }
 
     // State, or the result once ended
-    bool finished = job->size && job->pos >= job->size;
+    bool finished = job->finished;
     if(ended)
         strcpy(buf, finished ? "Finished" : "Stopped");
     else
@@ -213,14 +213,14 @@ static void screen_update (void)
 
     ui_widget_set_text(lbl_name, txt_name, sizeof(txt_name), job->name);
 
-    int16_t pct = job->size ? (int16_t)((uint64_t)job->pos * 100 / job->size) : 0;
+    int16_t pct = job->size ? (int16_t)((uint64_t)job->pos_done * 100 / job->size) : 0;
     if(pct != shown_pct) {
         shown_pct = pct;
         lv_bar_set_value(bar, pct, LV_ANIM_OFF);
     }
 
     format_time(time, sizeof(time), job->elapsed_ms);
-    snprintf(buf, sizeof(buf), "%d%%    line %u    %s", pct, (unsigned)job->line, time);
+    snprintf(buf, sizeof(buf), "%d%%    line %u    %s", pct, (unsigned)job->line_done, time);
     ui_widget_set_text(lbl_info, txt_info, sizeof(txt_info), buf);
 
     // Work position

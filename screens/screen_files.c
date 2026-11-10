@@ -6,7 +6,8 @@
  * Layout (480x320):
  *   top     Back (parent folder, or main screen), folder name, Reload
  *   middle  five rows of folders and G-code files, page up/down on the right
- *   overlay confirm before running a file
+ *   overlay confirm before running a file: Cancel, Frame, From line, Start
+ *   overlay pick the line to resume from, after a broken bit or a stop
  *
  * The card is read in grblHAL's loop (tft_sd.c); this screen requests a
  * listing and redraws when it arrives. Starting a job switches to the job
@@ -40,7 +41,13 @@ static lv_style_t s_title, s_name, s_dim, s_msg, s_big;
 
 static lv_obj_t *lbl_title, *lbl_msg, *lbl_page, *btn_back, *btn_reload, *btn_up, *btn_down;
 static lv_obj_t *btn_row[ROWS], *lbl_row_name[ROWS], *lbl_row_size[ROWS];
-static lv_obj_t *confirm, *lbl_confirm_name, *lbl_confirm_info, *lbl_confirm_status, *btn_start, *btn_cancel, *btn_frame;
+static lv_obj_t *confirm, *lbl_confirm_name, *lbl_confirm_info, *lbl_confirm_status, *btn_start, *btn_cancel, *btn_frame, *btn_from;
+static lv_obj_t *resume_panel, *lbl_resume_line, *lbl_resume_status, *btn_resume_back, *btn_resume_start;
+static lv_obj_t *btn_step[6];
+static const int16_t line_step[6] = { -100, -10, -1, 1, 10, 100 };
+static uint32_t from_line, resume_seq;
+static bool preparing;
+static int16_t resume_shown;
 
 static char path[TFT_SD_PATH_LEN] = "/";
 static char selected[TFT_SD_PATH_LEN + TFT_SD_NAME_LEN + 1];
@@ -141,6 +148,34 @@ static void show_page (void)
     lv_obj_align(lbl_page, btn_up, LV_ALIGN_OUT_BOTTOM_MID, 0, 18);
 }
 
+static const char *leaf_name (const char *p)
+{
+    const char *slash = strrchr(p, '/');
+
+    return slash ? slash + 1 : p;
+}
+
+static void show_from_line (void)
+{
+    char buf[16];
+
+    snprintf(buf, sizeof(buf), "%u", (unsigned)from_line);
+    lv_label_set_text(lbl_resume_line, buf);
+}
+
+// Start from where the last run of this file stopped, if it did
+static void open_resume (void)
+{
+    const tft_sd_job_t *job = tft_sd_job();
+
+    from_line = !job->active && !job->finished && job->line_done && !strcmp(job->source, leaf_name(selected)) ? job->line_done : 1;
+    preparing = false;
+    show_from_line();
+    lv_label_set_text(lbl_resume_status, from_line > 1 ? "Last run stopped at this line" : "");
+    lv_obj_set_hidden(btn_resume_start, false);
+    lv_obj_set_hidden(resume_panel, false);
+}
+
 static void show_confirm (const tft_sd_entry_t *e)
 {
     char size[16], info[96];
@@ -152,7 +187,8 @@ static void show_confirm (const tft_sd_entry_t *e)
     lv_label_set_text(lbl_confirm_info, info);
     lv_label_set_text(lbl_confirm_status, "");
     lv_obj_set_hidden(btn_start, false);
-    starting = framing = false;
+    starting = framing = preparing = false;
+    lv_obj_set_hidden(resume_panel, true);
     lv_obj_set_hidden(confirm, false);
 }
 
@@ -234,7 +270,9 @@ static void on_confirm (lv_obj_t *obj, lv_event_t event)
             tft_sd_scan(selected, ui_state.work_position[X_AXIS], ui_state.work_position[Y_AXIS]);
             lv_label_set_text(lbl_confirm_status, "Reading file...");
         }
-    } else if(obj == btn_start && !starting) {
+    } else if(obj == btn_from && !starting && !framing)
+        open_resume();
+    else if(obj == btn_start && !starting) {
         if(ui_state.system_state != STATE_IDLE)
             lv_label_set_text(lbl_confirm_status, "Machine must be idle");
         else if(tft_sd_run(selected)) {
@@ -246,6 +284,70 @@ static void on_confirm (lv_obj_t *obj, lv_event_t event)
         } else
             lv_label_set_text(lbl_confirm_status, "Path too long");
     }
+}
+
+static void on_resume (lv_obj_t *obj, lv_event_t event)
+{
+    // Holding a step button repeats it
+    if(event != LV_EVENT_CLICKED && !(event == LV_EVENT_LONG_PRESSED_REPEAT && obj != btn_resume_back && obj != btn_resume_start))
+        return;
+
+    for(uint_fast8_t idx = 0; idx < 6; idx++) {
+        if(obj == btn_step[idx] && !preparing) {
+            int32_t line = (int32_t)from_line + line_step[idx];
+            from_line = line < 1 ? 1 : (uint32_t)line;
+            show_from_line();
+            return;
+        }
+    }
+
+    if(obj == btn_resume_back) {
+        preparing = false;
+        lv_obj_set_hidden(resume_panel, true);
+    } else if(obj == btn_resume_start && !preparing) {
+        if(ui_state.system_state != STATE_IDLE)
+            lv_label_set_text(lbl_resume_status, "Machine must be idle");
+        else if(!ui_state.z_homed)
+            lv_label_set_text(lbl_resume_status, "Home the machine first");
+        else {
+            tft_log("resume %s from line %u", selected, (unsigned)from_line);
+            preparing = true;
+            resume_shown = -1;
+            resume_seq = tft_sd_resume_status()->seq;
+            tft_sd_resume(selected, from_line);
+            lv_obj_set_hidden(btn_resume_start, true);
+            lv_label_set_text(lbl_resume_status, "Preparing...");
+        }
+    }
+}
+
+static void resume_panel_create (lv_obj_t *parent)
+{
+    resume_panel = lv_obj_create(parent, NULL);
+    lv_obj_set_size(resume_panel, TFT_DISPLAY_WIDTH, TFT_DISPLAY_HEIGHT);
+    lv_obj_set_style(resume_panel, ui_widget_screen_style());
+
+    ui_widget_create_styled_label(resume_panel, 16, 16, &s_title, "Resume from line");
+    lbl_resume_line = ui_widget_create_styled_label(resume_panel, 300, 10, &s_big, "1");
+
+    lv_obj_t *lbl = ui_widget_create_styled_label(resume_panel, 16, 56, &s_dim,
+        "Goes up to Z home, over the start of the line, restores units, offset, "
+        "feed, spindle and coolant, then lowers to the cut and runs from there.");
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_BREAK);
+    lv_obj_set_width(lbl, 448);
+
+    for(uint_fast8_t idx = 0; idx < 6; idx++) {
+        char text[8];
+        snprintf(text, sizeof(text), "%+d", line_step[idx]);
+        btn_step[idx] = ui_widget_create_button(resume_panel, 12 + idx * 76, 140, 72, 56, text, BUTTON_STYLE_DEFAULT, on_resume);
+    }
+
+    lbl_resume_status = ui_widget_create_styled_label(resume_panel, 16, 210, &s_title, "");
+
+    btn_resume_back = ui_widget_create_button(resume_panel, 12, 248, 222, 60, LV_SYMBOL_LEFT " Back", BUTTON_STYLE_DEFAULT, on_resume);
+    btn_resume_start = ui_widget_create_button(resume_panel, 246, 248, 222, 60, LV_SYMBOL_PLAY " Start", BUTTON_STYLE_SUCCESS, on_resume);
+
+    lv_obj_set_hidden(resume_panel, true);
 }
 
 /*
@@ -313,9 +415,12 @@ static void screen_create (lv_obj_t *parent)
     lv_obj_set_width(lbl_confirm_info, 448);
     lbl_confirm_status = ui_widget_create_styled_label(confirm, 16, 170, &s_title, "");
 
-    btn_cancel = ui_widget_create_button(confirm, 12, 248, 140, 60, "Cancel", BUTTON_STYLE_DEFAULT, on_confirm);
-    btn_frame = ui_widget_create_button(confirm, 170, 248, 140, 60, "Frame", BUTTON_STYLE_PRIMARY, on_confirm);
-    btn_start = ui_widget_create_button(confirm, 328, 248, 140, 60, LV_SYMBOL_PLAY " Start", BUTTON_STYLE_SUCCESS, on_confirm);
+    btn_cancel = ui_widget_create_button(confirm, 12, 248, 108, 60, "Cancel", BUTTON_STYLE_DEFAULT, on_confirm);
+    btn_frame = ui_widget_create_button(confirm, 128, 248, 108, 60, "Frame", BUTTON_STYLE_PRIMARY, on_confirm);
+    btn_from = ui_widget_create_button(confirm, 244, 248, 108, 60, "From line", BUTTON_STYLE_DEFAULT, on_confirm);
+    btn_start = ui_widget_create_button(confirm, 360, 248, 108, 60, LV_SYMBOL_PLAY " Start", BUTTON_STYLE_SUCCESS, on_confirm);
+
+    resume_panel_create(confirm);
 
     lv_obj_set_hidden(confirm, true);
 
@@ -325,7 +430,7 @@ static void screen_create (lv_obj_t *parent)
 static void screen_show (void)
 {
     lv_obj_set_hidden(confirm, true);
-    starting = false;
+    starting = preparing = false;
     request();      // also mounts a card inserted since the last visit
 }
 
@@ -361,6 +466,34 @@ static void screen_update (void)
                 snprintf(buf, sizeof(buf), "X %.1f to %.1f   Y %.1f to %.1f", b->min_x, b->max_x, b->min_y, b->max_y);
                 lv_label_set_text(lbl_confirm_status, buf);
                 tft_frame(b->min_x, b->min_y, b->max_x, b->max_y);
+            }
+        }
+    }
+
+    // Resume: the file is copied in grblHAL's loop, then the copy started
+    if(preparing) {
+        const tft_sd_resume_t *r = tft_sd_resume_status();
+        char buf[64];
+
+        if(r->seq == resume_seq) {
+            if(r->progress != resume_shown) {
+                resume_shown = r->progress;
+                snprintf(buf, sizeof(buf), "Preparing %u%%", (unsigned)r->progress);
+                lv_label_set_text(lbl_resume_status, buf);
+            }
+        } else {
+            preparing = false;
+            if(!r->ok) {
+                lv_label_set_text(lbl_resume_status, r->error);
+                lv_obj_set_hidden(btn_resume_start, false);
+            } else {
+                // The UI loop switches to the job screen once it runs
+                lv_obj_set_hidden(resume_panel, true);
+                starting = true;
+                start_seq = tft_sd_job()->seq;
+                start_at = lv_tick_get();
+                lv_obj_set_hidden(btn_start, true);
+                lv_label_set_text(lbl_confirm_status, "Starting...");
             }
         }
     }

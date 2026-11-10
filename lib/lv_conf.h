@@ -65,8 +65,13 @@ typedef int16_t lv_coord_t;
 /* 1: use custom malloc/free, 0: use the built-in `lv_mem_alloc` and `lv_mem_free` */
 #define LV_MEM_CUSTOM      0
 #if LV_MEM_CUSTOM == 0
-/* Size of the memory used by `lv_mem_alloc` in bytes (>= 2kB)*/
-#  define LV_MEM_SIZE    (16 * 1024)
+/* Size of the memory used by `lv_mem_alloc` in bytes (>= 2kB)
+ * Screens are created on first use and kept, so this must hold all of them.
+ * Out of memory stops LVGL in an assert and the watchdog resets the board.
+ * $TFTMEM shows how much is used. */
+#ifndef LV_MEM_SIZE
+#  define LV_MEM_SIZE    (32 * 1024)
+#endif
 
 /* Complier prefix for a big array declaration */
 #  define LV_MEM_ATTR

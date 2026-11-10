@@ -219,7 +219,6 @@ static void read_toolsetter_state (void)
     coord_data_t g59_3;
 
     ui_state.toolsetter_triggered = hal.probe.is_triggered && hal.probe.is_triggered(Probe_Toolsetter);
-    ui_state.tls_homed = !!(sys.homed.mask & bit(Z_AXIS));
     ui_state.tlo_ref_set = !!(sys.tlo_reference_set.mask & bit(Z_AXIS));
     ui_state.tlo_z = gc_state.tool_length_offset[Z_AXIS];
 
@@ -277,6 +276,10 @@ static void tft_poll (sys_state_t state)
         ui_state_update_feed_spindle(st_get_realtime_rate(), sp && sp->state.on ? sp->rpm_overridden : 0.0f);
         ui_state_update_overrides(sys.override.feed_rate, sp ? sp->override_pct : 100);
         ui_state.probe_triggered = hal.probe.get_state && hal.probe.get_state().triggered;
+        ui_state.z_homed = !!(sys.homed.mask & bit(Z_AXIS));
+        ui_state.tool = gc_state.tool ? gc_state.tool->tool_id : 0;
+        ui_state.tool_pending = gc_state.tool_pending;
+        ui_state.tc_mode = (uint8_t)settings.tool_change.mode;
 
 #if TOOLSETTER_ENABLE
         read_toolsetter_state();
@@ -424,12 +427,39 @@ static void queue_step (const char *cmd, uint32_t delay_ms, uint8_t flags, uint8
         c.kind = kind;
         bool queued = xQueueSend(cmd_queue, &c, 0) == pdTRUE;
         tft_log("cmd %s: %s", queued ? "queued" : "DROPPED", c.line);
+        (void)queued;
     }
 }
 
 static void queue_command (const char *cmd, uint32_t delay_ms, uint8_t flags)
 {
     queue_step(cmd, delay_ms, flags, Cmd_Line);
+}
+
+// Each line waits for the previous one to finish, see tft_interface.h
+void tft_send_lines(const char *lines) {
+    char line[TFT_CMD_MAX_LEN];
+    uint8_t flags = 0;
+
+    while(lines && *lines) {
+        const char *end = strchr(lines, '|');
+        size_t len = end ? (size_t)(end - lines) : strlen(lines);
+
+        if(len >= sizeof(line))
+            len = sizeof(line) - 1;
+        memcpy(line, lines, len);
+        line[len] = '\0';
+
+        char *p = line;
+        while(*p == ' ')
+            p++;
+        if(*p) {
+            queue_command(p, 0, flags);
+            flags = CMD_CHAINED;
+        }
+
+        lines = end ? end + 1 : NULL;
+    }
 }
 
 void tft_send_command(const char *cmd) {
@@ -605,6 +635,17 @@ void tft_feed_hold(void) {
 }
 
 void tft_cycle_start(void) {
+    send_rt(CMD_CYCLE_START);
+}
+
+/*
+ * Resume after a hold, or after a tool change (M6). grblHAL only takes cycle
+ * start in a tool change once the sender acknowledged it, so acknowledge
+ * first. With $341=3 grblHAL then measures the new tool on the toolsetter.
+ */
+void tft_resume(void) {
+    if(ui_state.system_state & STATE_TOOL_CHANGE)
+        send_rt(CMD_TOOL_ACK);
     send_rt(CMD_CYCLE_START);
 }
 

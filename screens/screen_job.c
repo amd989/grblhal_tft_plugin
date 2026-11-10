@@ -5,9 +5,13 @@
  *
  * Layout (480x320):
  *   top     machine state, file name
- *   middle  progress bar, percent / line / elapsed time, work position,
- *           feed and spindle with -10% / 100% / +10% override buttons
+ *   middle  progress bar, percent / line / elapsed / remaining time, work
+ *           position, feed and spindle with -10% / 100% / +10% override buttons
  *   bottom  Hold/Resume and Stop (tap twice), Done once the job has ended
+ *
+ * On a tool change (M6, with $341 set) the position line asks for the next
+ * tool and Resume continues. With $341=3 grblHAL then measures the new tool
+ * on the toolsetter before going on.
  *
  * Shown by the UI loop whenever an SD job starts, also one started from a
  * host with $F=. Stop sends grblHAL's stop command (0x19): motion ramps down,
@@ -33,14 +37,18 @@
 #define UPDATE_MS       200
 #define CONFIRM_MS      3000
 #define DRO_AXES        (N_AXIS < 3 ? N_AXIS : 3)
+// Remaining time is extrapolated from the bytes done, once there is enough
+#define ETA_MIN_MS      15000
+#define ETA_MIN_PERMILLE 10
 
-static lv_style_t s_name, s_info, s_value;
+static lv_style_t s_name, s_info, s_value, s_tool;
 
-static lv_obj_t *lbl_state, *lbl_name, *bar, *lbl_info, *lbl_pos, *lbl_feed, *lbl_spindle;
+static lv_obj_t *lbl_state, *lbl_name, *bar, *lbl_info, *lbl_pos, *lbl_tool, *lbl_feed, *lbl_spindle;
 static lv_obj_t *btn_feed[3], *btn_spindle[3], *btn_hold, *lbl_hold, *btn_stop, *lbl_stop;
 
 static char txt_state[24], txt_name[56], txt_info[64], txt_pos[64], txt_feed[40], txt_spindle[40];
-static char txt_hold[16], txt_stop[24];
+static char txt_hold[16], txt_stop[24], txt_tool[48];
+static int8_t tool_shown = -1;
 static uint32_t last_update, stop_armed_at;
 static bool stop_armed, ended;
 static int16_t shown_pct = -1;
@@ -60,6 +68,9 @@ static void styles_init (void)
 
     lv_style_copy(&s_value, &s_info);
     s_value.text.color = UI_COLOR_TEXT;
+
+    lv_style_copy(&s_tool, &s_name);
+    s_tool.text.color = UI_COLOR_WARNING;
 }
 
 static void format_time (char *buf, size_t size, uint32_t ms)
@@ -101,8 +112,8 @@ static void on_hold (lv_obj_t *obj, lv_event_t event)
         return;
 
     tft_log("btn job hold clicked");
-    if(ui_state.system_state & (STATE_HOLD|STATE_SAFETY_DOOR))
-        tft_cycle_start();
+    if(ui_state.system_state & (STATE_HOLD|STATE_SAFETY_DOOR|STATE_TOOL_CHANGE))
+        tft_resume();
     else
         tft_feed_hold();
     disarm_stop();
@@ -156,6 +167,8 @@ static void screen_create (lv_obj_t *parent)
 
     lbl_info = ui_widget_create_styled_label(parent, 16, 100, &s_info, "");
     lbl_pos = ui_widget_create_styled_label(parent, 16, 124, &s_value, "");
+    lbl_tool = ui_widget_create_styled_label(parent, 16, 118, &s_tool, "");
+    lv_obj_set_hidden(lbl_tool, true);
 
     override_row(parent, 150, btn_feed, &lbl_feed);
     override_row(parent, 198, btn_spindle, &lbl_spindle);
@@ -169,7 +182,8 @@ static void screen_create (lv_obj_t *parent)
 static void screen_show (void)
 {
     txt_state[0] = txt_name[0] = txt_info[0] = txt_pos[0] = txt_feed[0] = txt_spindle[0] = '\0';
-    txt_hold[0] = txt_stop[0] = '\0';
+    txt_hold[0] = txt_stop[0] = txt_tool[0] = '\0';
+    tool_shown = -1;
     shown_pct = -1;
     ended = false;
     disarm_stop();
@@ -220,8 +234,30 @@ static void screen_update (void)
     }
 
     format_time(time, sizeof(time), job->elapsed_ms);
-    snprintf(buf, sizeof(buf), "%d%%    line %u    %s", pct, (unsigned)job->line_done, time);
+    int n = snprintf(buf, sizeof(buf), "%d%%   line %u   %s", pct, (unsigned)job->line_done, time);
+
+    // Remaining time while running, from the average rate so far
+    if(!ended && job->size && job->pos_done < job->size && job->elapsed_ms >= ETA_MIN_MS &&
+        (uint64_t)job->pos_done * 1000 >= (uint64_t)job->size * ETA_MIN_PERMILLE) {
+        char left[16];
+        uint32_t ms = (uint32_t)((uint64_t)job->elapsed_ms * (job->size - job->pos_done) / job->pos_done);
+        format_time(left, sizeof(left), ms);
+        snprintf(buf + n, sizeof(buf) - n, "   %s left", left);
+    }
     ui_widget_set_text(lbl_info, txt_info, sizeof(txt_info), buf);
+
+    // Tool change: ask for the tool in place of the position
+    int8_t tool_change = !ended && (state & STATE_TOOL_CHANGE);
+    if(tool_change != tool_shown) {
+        tool_shown = tool_change;
+        lv_obj_set_hidden(lbl_tool, !tool_change);
+        lv_obj_set_hidden(lbl_pos, tool_change);
+        ui_widget_set_button_style(btn_hold, tool_change ? BUTTON_STYLE_WARNING : BUTTON_STYLE_DEFAULT);
+    }
+    if(tool_change) {
+        ui_widget_format_tool_change(buf, sizeof(buf));
+        ui_widget_set_text(lbl_tool, txt_tool, sizeof(txt_tool), buf);
+    }
 
     // Work position
     char *p = buf;
@@ -238,7 +274,7 @@ static void screen_update (void)
     snprintf(buf, sizeof(buf), "Spindle %u%%   %.0f rpm", (unsigned)ui_state.spindle_override, ui_state.spindle_speed);
     ui_widget_set_text(lbl_spindle, txt_spindle, sizeof(txt_spindle), buf);
 
-    ui_widget_set_text(lbl_hold, txt_hold, sizeof(txt_hold), (state & (STATE_HOLD|STATE_SAFETY_DOOR)) ? LV_SYMBOL_PLAY " Resume" : LV_SYMBOL_PAUSE " Hold");
+    ui_widget_set_text(lbl_hold, txt_hold, sizeof(txt_hold), (state & (STATE_HOLD|STATE_SAFETY_DOOR|STATE_TOOL_CHANGE)) ? LV_SYMBOL_PLAY " Resume" : LV_SYMBOL_PAUSE " Hold");
     ui_widget_set_text(lbl_stop, txt_stop, sizeof(txt_stop), ended ? "Done" : stop_armed ? "Tap again to stop" : LV_SYMBOL_STOP " Stop");
 }
 

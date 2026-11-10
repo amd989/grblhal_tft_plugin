@@ -82,8 +82,8 @@ static void on_hold (lv_obj_t *obj, lv_event_t event)
 {
     if(event == LV_EVENT_CLICKED) {
         tft_log("btn hold clicked");
-        if(ui_state.system_state & (STATE_HOLD|STATE_SAFETY_DOOR))
-            tft_cycle_start();
+        if(ui_state.system_state & (STATE_HOLD|STATE_SAFETY_DOOR|STATE_TOOL_CHANGE))
+            tft_resume();
         else
             tft_feed_hold();
     }
@@ -114,6 +114,14 @@ static void on_files (lv_obj_t *obj, lv_event_t event)
     }
 }
 
+static void on_macros (lv_obj_t *obj, lv_event_t event)
+{
+    if(event == LV_EVENT_CLICKED) {
+        tft_log("btn macros clicked");
+        ui_screen_manager_show(SCREEN_MACROS);
+    }
+}
+
 static void on_jog (lv_obj_t *obj, lv_event_t event)
 {
     if(event == LV_EVENT_CLICKED) {
@@ -135,8 +143,9 @@ static void screen_create (lv_obj_t *parent)
     lbl_state = ui_widget_create_styled_label(parent, 16, 14, ui_widget_state_style(STATE_IDLE), "");
     txt_state[0] = '\0';
 
-    ui_widget_create_button(parent, 148, 8, 96, 44, "Files", BUTTON_STYLE_PRIMARY, on_files);
-    ui_widget_create_button(parent, 252, 8, 96, 44, "Jog", BUTTON_STYLE_PRIMARY, on_jog);
+    ui_widget_create_button(parent, 136, 8, 80, 44, "Files", BUTTON_STYLE_PRIMARY, on_files);
+    ui_widget_create_button(parent, 222, 8, 80, 44, "Jog", BUTTON_STYLE_PRIMARY, on_jog);
+    ui_widget_create_button(parent, 308, 8, 80, 44, "Macros", BUTTON_STYLE_PRIMARY, on_macros);
 
     // Alarm reason, empty unless in alarm
     lbl_reason = ui_widget_create_styled_label(parent, 16, 56, &s_reason, "");
@@ -144,7 +153,7 @@ static void screen_create (lv_obj_t *parent)
     lv_obj_set_width(lbl_reason, 452);
     txt_reason[0] = '\0';
 
-    lv_obj_t *btn = ui_widget_create_button(parent, 356, 8, 112, 44, "WPos", BUTTON_STYLE_DEFAULT, on_coord);
+    lv_obj_t *btn = ui_widget_create_button(parent, 394, 8, 74, 44, "WPos", BUTTON_STYLE_DEFAULT, on_coord);
     lbl_coord = lv_obj_get_child(btn, NULL);
     strcpy(txt_coord, "WPos");
 
@@ -201,7 +210,13 @@ static void screen_update (void)
         ui_widget_set_text(lbl_state, txt_state, sizeof(txt_state), buf);
     }
 
-    ui_widget_set_text(lbl_reason, txt_reason, sizeof(txt_reason), ui_state_get_alarm_string());
+    // Alarm reason, or the tool to fit during a tool change from a host
+    if(state & STATE_TOOL_CHANGE) {
+        char tool[48];
+        ui_widget_format_tool_change(tool, sizeof(tool));
+        ui_widget_set_text(lbl_reason, txt_reason, sizeof(txt_reason), tool);
+    } else
+        ui_widget_set_text(lbl_reason, txt_reason, sizeof(txt_reason), ui_state_get_alarm_string());
     ui_widget_set_text(lbl_net, txt_net, sizeof(txt_net), ui_state.net_status);
 
     // Position
@@ -216,7 +231,7 @@ static void screen_update (void)
     }
 
     ui_widget_set_text(lbl_coord, txt_coord, sizeof(txt_coord), ui_state.coord_mode == COORD_MODE_WORK ? "WPos" : "MPos");
-    ui_widget_set_text(lbl_hold, txt_hold, sizeof(txt_hold), (state & (STATE_HOLD|STATE_SAFETY_DOOR)) ? "Resume" : "Hold");
+    ui_widget_set_text(lbl_hold, txt_hold, sizeof(txt_hold), (state & (STATE_HOLD|STATE_SAFETY_DOOR|STATE_TOOL_CHANGE)) ? "Resume" : "Hold");
 }
 
 void screen_main_register (void)

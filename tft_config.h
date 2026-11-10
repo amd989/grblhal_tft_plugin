@@ -85,6 +85,41 @@
 #define TFT_SPINDLE_RPM         10000
 #endif
 
+// Macro buttons: defaults for settings $450-$455, "Label|G-code|G-code...".
+// Change them with $450=... from a console, an empty setting hides the button.
+#ifndef TFT_MACRO_1
+#define TFT_MACRO_1             "Safe Z|G53 G0 Z-1"
+#endif
+#ifndef TFT_MACRO_2
+#define TFT_MACRO_2             "Park|G53 G0 Z-1|G28"
+#endif
+#ifndef TFT_MACRO_3
+#define TFT_MACRO_3             "Change pos|G53 G0 Z-1|G30"
+#endif
+#ifndef TFT_MACRO_4
+#define TFT_MACRO_4             "Save park|G28.1"
+#endif
+#ifndef TFT_MACRO_5
+#define TFT_MACRO_5             "Save change|G30.1"
+#endif
+#ifndef TFT_MACRO_6
+#define TFT_MACRO_6             ""
+#endif
+
+// Resume from line: the job is copied from that line to this file on the SD
+// card, after a few lines that restore the modal state and position. The
+// spindle gets TFT_RESUME_DWELL seconds to spin up, and the bit goes down to
+// the cut from TFT_RESUME_CLEARANCE mm above it.
+#ifndef TFT_RESUME_FILE
+#define TFT_RESUME_FILE         "/tft_resume.nc"
+#endif
+#ifndef TFT_RESUME_DWELL
+#define TFT_RESUME_DWELL        3
+#endif
+#ifndef TFT_RESUME_CLEARANCE
+#define TFT_RESUME_CLEARANCE    2.0f
+#endif
+
 // Debug log of touches, button clicks and commands, printed as [MSG:TFT ...]
 #ifndef TFT_DEBUG
 #define TFT_DEBUG               0

@@ -172,6 +172,16 @@ void ui_widget_format_state(char *buf, size_t size) {
         snprintf(buf, size, "%s", ui_state_get_state_string());
 }
 
+void ui_widget_format_tool_change(char *buf, size_t size) {
+#if TOOLSETTER_ENABLE
+    if(ui_state.tc_mode == 3 && !ui_state.tls_pos_set) {
+        snprintf(buf, size, "T%d: toolsetter position not set!", (int)ui_state.tool_pending);
+        return;
+    }
+#endif
+    snprintf(buf, size, "Change to T%d, then Resume", (int)ui_state.tool_pending);
+}
+
 lv_style_t *ui_widget_state_style(sys_state_t state) {
     if(state == STATE_IDLE)
         return &style_state_idle;

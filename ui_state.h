@@ -39,6 +39,7 @@ typedef enum {
     SCREEN_LANGUAGE,        // Language selection
     SCREEN_FILE_INFO,       // File information dialog
     SCREEN_CALIBRATE,       // Touch calibration
+    SCREEN_MACROS,          // Macro buttons
     SCREEN_COUNT            // Total number of screens
 } ui_screen_t;
 
@@ -71,10 +72,13 @@ typedef struct {
     uint8_t spindle_override;       // Spindle override percentage (10-200)
     bool probe_triggered;           // Probe input active (plate touched)
     char net_status[40];            // "Wi-Fi 192.168.1.20", "" without networking
+    bool z_homed;                   // Z homed: tool measurement and resume move to the Z home position
+    int32_t tool;                   // Current tool number
+    int32_t tool_pending;           // Tool for the next M6, shown during a tool change
+    uint8_t tc_mode;                // $341 tool change mode, 3: measure on the toolsetter
     bool toolsetter_triggered;      // Toolsetter input active
     bool tls_pos_set;               // Toolsetter position (G59.3) is set
     float tls_pos[3];               // Toolsetter position, machine X Y Z
-    bool tls_homed;                 // Z homed, needed to measure a tool
     bool tlo_ref_set;               // Tool length reference taken
     float tlo_z;                    // Active tool length offset, Z
 

@@ -235,7 +235,7 @@ static void on_tool_panel (lv_obj_t *obj, lv_event_t event)
         }
         tool_set_shown = -1;
     } else if(obj == btn_tool_measure) {
-        if(!ui_state.tls_homed)
+        if(!ui_state.z_homed)
             lv_label_set_text(lbl_tool_status, "Home the machine first");
         else if(!ui_state.tls_pos_set)
             lv_label_set_text(lbl_tool_status, "Set the toolsetter position first");

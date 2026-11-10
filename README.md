@@ -6,8 +6,11 @@ A touchscreen user interface plugin for grblHAL using LVGL and TFT_eSPI.
 
 - Machine state with the alarm reason, work/machine position, Home, Unlock, Hold, Reset
 - Jogging, set work zero, go to zero, Z probe with a touch plate, tool length measurement on a toolsetter, spindle on/off
-- SD card file browser and job screen: progress, elapsed time, feed and spindle overrides, hold and stop
+- SD card file browser and job screen: progress, elapsed and remaining time, feed and spindle overrides, hold and stop
 - Frame: trace the outline of a file's X/Y moves before running it
+- Resume a job from a line, after a broken bit or a stop
+- Tool changes (M6): the screen asks for the next tool, Resume continues, with `$341=3` after measuring it on the toolsetter
+- Six macro buttons, set with `$450`-`$455`
 - Wi-Fi or Ethernet status with the IP address on the main screen
 - Touch calibration (`$TFTCAL`), saved across resets, and a click on each touch
 
@@ -97,7 +100,7 @@ Needs `SDCARD_ENABLE` in `my_machine.h`. **Files** on the main screen lists fold
 
 Tapping a file asks for confirmation, then runs it with `$F=<path>` from the current work zero. The machine must be idle. The job screen opens by itself whenever a job starts, also one started from a host:
 
-- progress, current line and elapsed time
+- progress, current line, elapsed time and, after 15 s and 1%, the remaining time extrapolated from the bytes done so far
 - feed and spindle override: -10%, back to 100%, +10%
 - Hold / Resume
 - Stop, tap twice: motion ramps down, spindle and coolant turn off, the job ends and the position is kept
@@ -105,6 +108,16 @@ Tapping a file asks for confirmation, then runs it with `$F=<path>` from the cur
 While a job runs, grblHAL ignores everything from the serial port except real-time commands (`?`, `!`, `~` and overrides), so a host like CNCjs can watch, hold and resume, but not send G-code.
 
 **Frame** on the confirm panel reads the file for the X/Y extent of its moves (absolute and relative, mm and inch, arcs at their true extent; G53, G92, G10, G28/G30 and probing lines are left out) and traces that rectangle as jogs at the current Z, so raise Z first. Stop on the jog screen cancels the rest of the trace.
+
+### Resume from line
+
+**From line** on the confirm panel restarts a file partway through. It suggests the line that was moving when the last run of that file stopped (the job screen's line; in an arc it may be the line before), and -100 / -10 / -1 / +1 / +10 / +100 adjust it; hold a button to repeat. Go back a few lines to recut a little before the break. Z must be homed.
+
+Start reads the file up to that line for the modal state (units, G90/G91, work offset G54-G59.3, plane, feed, spindle and speed, coolant) and the position, then writes `TFT_RESUME_FILE` (`/tft_resume.nc`) to the card: up to the Z home position (G53), over the start point, spindle on with a `TFT_RESUME_DWELL` s dwell, down to `TFT_RESUME_CLEARANCE` mm above the cut, then to the cut at the file's plunge feed (of its last Z only G1, else its feed), then the file from that line. It runs that copy; the job screen shows the original name and line numbers.
+
+Limits: tool changes, G92 offsets and G43 tool offsets before the line are not replayed, and a file with relative moves (G91) is taken to have started at work zero. Set work zero and the tool length as they were before resuming.
+
+`examples/tft-test-resume.nc` tries it in the air: five squares with absolute moves and the spindle off. Set work zero well above the bed, run it, stop it partway, and resume it.
 
 `examples/tft-test-air.nc` is a safe first job: ten 20 mm squares in X/Y with relative moves and the spindle off. Jog to the middle of the bed and raise Z before running it.
 
@@ -119,6 +132,30 @@ While a job runs, grblHAL ignores everything from the serial port except real-ti
   - Set here: jog the bit a few mm above the setter and tap twice. Saves the machine position as G59.3, the same place grblHAL's `$341` tool change modes use. Start high enough for longer tools: the probe goes down at most `TFT_PROBE_DISTANCE` from there.
   - Measure: needs Z homed. Goes up to the Z home position, over the setter, down to the G59.3 Z, then probes fast and slow with the toolsetter input. The first measurement after homing sets the reference (`$TLR`); measure it right after Probe Z. Later tools get a tool length offset (`G43.1`) from that reference, so Z0 on the work stays valid. Homing clears the reference. A failed probe, Stop or Reset drops the remaining steps.
   - The panel shows the setter input live, the saved position and the active offset. Probing goes back to the touch plate input when it is done.
+
+## Tool changes
+
+With a tool change mode in `$341`, an M6 in a job stops it until the tool is changed. The job screen (or the main screen, for a job from a host) shows "Change to T2, then Resume", and Resume acknowledges the tool change and continues (the touchscreen is the cycle start button, there is no cycle start pin with a toolsetter).
+
+With a toolsetter, `$341=3` measures each new tool on it and sets the tool length offset before going on:
+
+- `$341=3`: on M6, up to the Z home position, wait for the tool change; Resume then probes on the toolsetter at G59.3
+- `$65=8`: switch to the toolsetter input for that probe (bit 3 of the probing options)
+- `$342`: how far down to probe from the G59.3 Z, 50 here like the Tool setter panel
+- set G59.3 first with Set here on the Tool setter panel. Without it, the screen warns "toolsetter position not set!", as grblHAL would go to machine 0,0,0.
+
+Measure the first tool on the Tool setter panel after Probe Z, then each tool change keeps the same Z0. Homing clears the reference.
+
+## Macros
+
+**Macros** on the main screen has six buttons, from settings `$450`-`$455`. Each is a label and G-code lines, separated by `|`:
+
+```
+$451=Park|G53 G0 Z-1|G28
+$455=Dust on|M64 P0
+```
+
+Each line runs once the previous one has finished; a stop, reset or alarm drops the rest. An empty setting hides its button, and at most 8 lines run. They are set from any console (WebUI, CNCjs, serial) and the screen picks changes up by itself. Defaults (`TFT_MACRO_1`-`6` in `tft_config.h`): Safe Z, Park (G28), Change pos (G30), Save park (G28.1), Save change (G30.1). Save the park and change positions once before using Park and Change pos; G28/G30 go to machine 0,0,0 until then. `G53 G0 Z-1` assumes the Z home position is at or below machine Z-1.
 
 ## Network status
 

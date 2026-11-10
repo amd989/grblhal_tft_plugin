@@ -80,6 +80,10 @@ void tft_goto_zero_z(void);
 // current work Z. See TFT_PROBE_* in tft_config.h.
 void tft_probe_z(float work_z);
 
+// Send lines separated by '|', each after the previous one has finished.
+// The rest is dropped on a stop, reset or alarm. At most 8 lines are queued.
+void tft_send_lines(const char *lines);
+
 #if TOOLSETTER_ENABLE
 // Measure the tool on the toolsetter at G59.3. The first measurement after
 // homing sets the reference ($TLR), later ones the tool length offset (G43.1).
@@ -108,6 +112,9 @@ void tft_set_axis_value(uint8_t axis, float value);
 /*
  * Real-time Commands
  */
+
+// Resume after a hold or a tool change (acknowledges the tool change first)
+void tft_resume(void);
 
 // Feed hold (pause)
 void tft_feed_hold(void);

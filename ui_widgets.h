@@ -224,6 +224,10 @@ void ui_widget_set_text(lv_obj_t *label, char *shown, size_t size, const char *t
  * "ALARM 9", and a large font style colored by state
  */
 void ui_widget_format_state(char *buf, size_t size);
+
+// What to do in a tool change: "Change to T2, then Resume", or a warning
+// when $341=3 would measure at a toolsetter position that was never set
+void ui_widget_format_tool_change(char *buf, size_t size);
 lv_style_t *ui_widget_state_style(sys_state_t state);
 
 #ifdef __cplusplus

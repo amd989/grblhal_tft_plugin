@@ -17,6 +17,9 @@
 
 #include "driver.h"
 
+#include <stdio.h>
+#include "esp_system.h"
+
 #if TFT_ENABLE
 
 #if defined(BOARD_MKS_DLC32_V2P0)
@@ -39,6 +42,8 @@
 #include "screens/screen_calibrate.h"
 #include "screens/screen_files.h"
 #include "screens/screen_job.h"
+#include "screens/screen_macros.h"
+#include "tft_macros.h"
 #include "tft_sd.h"
 #include "tft_touch.h"
 
@@ -71,8 +76,25 @@ static status_code_t tft_calibrate_cmd (sys_state_t state, char *args)
     return Status_OK;
 }
 
+// LVGL memory use, sampled by the UI task (LVGL is not thread safe)
+static volatile uint32_t lv_used, lv_total, lv_max_used;
+static volatile uint8_t lv_frag;
+
+static status_code_t tft_mem_cmd (sys_state_t state, char *args)
+{
+    char buf[100];
+
+    snprintf(buf, sizeof(buf), "[TFT MEM:LVGL %u/%u used, peak %u, frag %u%%, heap free %u, min %u]" ASCII_EOL,
+              (unsigned)lv_used, (unsigned)lv_total, (unsigned)lv_max_used, (unsigned)lv_frag,
+              (unsigned)esp_get_free_heap_size(), (unsigned)esp_get_minimum_free_heap_size());
+    hal.stream.write(buf);
+
+    return Status_OK;
+}
+
 static const sys_command_t tft_command_list[] = {
-    { "TFTCAL", tft_calibrate_cmd, { .noargs = On, .allow_blocking = On }, { .str = "calibrate the TFT touchscreen" } }
+    { "TFTCAL", tft_calibrate_cmd, { .noargs = On, .allow_blocking = On }, { .str = "calibrate the TFT touchscreen" } },
+    { "TFTMEM", tft_mem_cmd, { .noargs = On, .allow_blocking = On }, { .str = "show TFT memory use" } }
 };
 
 static sys_commands_t tft_commands = {
@@ -95,6 +117,7 @@ static void tft_ui_task(void *param) {
     screen_calibrate_register();
     screen_files_register();
     screen_job_register();
+    screen_macros_register();
 
     uint32_t job_seq = tft_sd_job()->seq;
 
@@ -149,6 +172,19 @@ static void tft_ui_task(void *param) {
         // Process LVGL tasks (event handling, animations, updates)
         lvgl_task_handler();
 
+        // Sample LVGL memory use for $TFTMEM, about once a second
+        static uint32_t mem_count = 0;
+        if(++mem_count >= 1000 / TFT_LVGL_REFRESH_MS) {
+            lv_mem_monitor_t mon;
+            mem_count = 0;
+            lv_mem_monitor(&mon);
+            lv_total = mon.total_size;
+            lv_used = mon.total_size - mon.free_size;
+            if(lv_used > lv_max_used)
+                lv_max_used = lv_used;
+            lv_frag = mon.frag_pct;
+        }
+
         // Precise timing using relative delay
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
     }
@@ -169,6 +205,7 @@ void tft_plugin_init(void) {
     // UI state cache and grblHAL link (command queue, state polling)
     ui_state_init();
     tft_interface_init();
+    tft_macros_init();
 
     // Create FreeRTOS UI task on Core 0
     xTaskCreatePinnedToCore(

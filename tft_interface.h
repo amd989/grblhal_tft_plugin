@@ -40,6 +40,9 @@ void tft_log(const char *fmt, ...);
  * from its own loop.
  */
 
+// Longest command line, including $F=<path>
+#define TFT_CMD_MAX_LEN 128
+
 // Send raw G-code command
 void tft_send_command(const char *cmd);
 
@@ -94,6 +97,10 @@ void tft_stop(void);
 // Soft reset
 void tft_reset(void);
 
+// Feed and spindle overrides: dir > 0 +10%, dir < 0 -10%, 0 back to 100%
+void tft_feed_override(int8_t dir);
+void tft_spindle_override(int8_t dir);
+
 // Clear alarm lock ($X)
 void tft_unlock(void);
 
@@ -115,19 +122,6 @@ bool tft_is_homing_enabled(void);
 
 // Check if limits are enabled
 bool tft_is_limits_enabled(void);
-
-/*
- * SD Card Commands (if SD card plugin is loaded)
- */
-
-// Start SD card job
-bool tft_sd_start_job(const char *filename);
-
-// Get SD card job progress (0-100)
-uint8_t tft_sd_get_progress(void);
-
-// Check if SD card is mounted
-bool tft_sd_is_mounted(void);
 
 /*
  * Settings Commands

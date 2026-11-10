@@ -37,6 +37,9 @@
 #include "screens/screen_main.h"
 #include "screens/screen_jog.h"
 #include "screens/screen_calibrate.h"
+#include "screens/screen_files.h"
+#include "screens/screen_job.h"
+#include "tft_sd.h"
 #include "tft_touch.h"
 
 static on_report_options_ptr on_report_options;
@@ -90,6 +93,10 @@ static void tft_ui_task(void *param) {
     screen_main_register();
     screen_jog_register();
     screen_calibrate_register();
+    screen_files_register();
+    screen_job_register();
+
+    uint32_t job_seq = tft_sd_job()->seq;
 
     // Breathing effect during startup (2 seconds)
     uint32_t splash_count = 0;
@@ -128,6 +135,11 @@ static void tft_ui_task(void *param) {
             }
         } else if(tft_touch_calibration_requested())
             ui_screen_manager_show(SCREEN_CALIBRATE);
+        else if(tft_sd_job()->seq != job_seq) {
+            // An SD job started, from the screen or a host
+            job_seq = tft_sd_job()->seq;
+            ui_screen_manager_show(SCREEN_JOB);
+        }
 
         // Update screen manager (calls current screen's update callback)
         ui_screen_manager_update();

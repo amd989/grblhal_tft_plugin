@@ -24,14 +24,15 @@
 #include "grbl/settings.h"
 #include "grbl/gcode.h"
 #include "grbl/stepper.h"
+#include "grbl/spindle_control.h"
 
 #include "tft_interface.h"
 #include "ui_state.h"
+#include "tft_sd.h"
 
 // How often the UI state cache is refreshed from grblHAL, in ms.
 #define TFT_POLL_INTERVAL_MS    100
 #define TFT_CMD_QUEUE_LEN       8
-#define TFT_CMD_MAX_LEN         96
 // Drop a command grblHAL has not accepted by then (busy, or in Hold), so it
 // does not run unexpectedly much later.
 #define TFT_CMD_TIMEOUT_MS      2000
@@ -110,8 +111,14 @@ static void tft_poll (sys_state_t state)
         ui_state_update_position(wpos, mpos);
         ui_state_update_system_state(now_state);
         ui_state_set_alarm(alarm);
-        ui_state_update_feed_spindle(st_get_realtime_rate(), 0.0f);
+        spindle_ptrs_t *spindle = spindle_get(0);
+        struct spindle_param *sp = spindle ? spindle->param : NULL;
+
+        ui_state_update_feed_spindle(st_get_realtime_rate(), sp && sp->state.on ? sp->rpm_overridden : 0.0f);
+        ui_state_update_overrides(sys.override.feed_rate, sp ? sp->override_pct : 100);
     }
+
+    tft_sd_poll();
 
     tft_cmd_t cmd;
 
@@ -286,6 +293,15 @@ void tft_reset(void) {
     send_rt(CMD_RESET);
 }
 
+// dir > 0: +10%, dir < 0: -10%, 0: back to 100%
+void tft_feed_override(int8_t dir) {
+    send_rt(dir > 0 ? CMD_OVERRIDE_FEED_COARSE_PLUS : dir < 0 ? CMD_OVERRIDE_FEED_COARSE_MINUS : CMD_OVERRIDE_FEED_RESET);
+}
+
+void tft_spindle_override(int8_t dir) {
+    send_rt(dir > 0 ? CMD_OVERRIDE_SPINDLE_COARSE_PLUS : dir < 0 ? CMD_OVERRIDE_SPINDLE_COARSE_MINUS : CMD_OVERRIDE_SPINDLE_RESET);
+}
+
 void tft_unlock(void) {
     // grblHAL refuses $X after a critical alarm (e.g. hard limit) until a
     // reset, so reset first. The machine is already stopped in alarm.
@@ -321,32 +337,6 @@ bool tft_is_homing_enabled(void) {
 
 bool tft_is_limits_enabled(void) {
     return settings.limits.flags.hard_enabled;
-}
-
-/*
- * SD Card Commands
- */
-
-bool tft_sd_start_job(const char *filename) {
-    if(!filename || !*filename)
-        return false;
-
-    tft_send_command_fmt("$SD/Run=%s\n", filename);
-    return true;
-}
-
-uint8_t tft_sd_get_progress(void) {
-    // This would need integration with SD card plugin
-    // For now, return 0
-    // TODO: Add SD card progress tracking
-    return 0;
-}
-
-bool tft_sd_is_mounted(void) {
-    // This would need integration with SD card plugin
-    // For now, return false
-    // TODO: Add SD card detection
-    return false;
 }
 
 /*

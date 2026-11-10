@@ -19,12 +19,15 @@ list(APPEND SRCS
     ${TFT_PLUGIN_DIR}/lvgl_init.cpp
     ${TFT_PLUGIN_DIR}/arduino_spi.cpp
     ${TFT_PLUGIN_DIR}/tft_touch.cpp
+    ${TFT_PLUGIN_DIR}/tft_sd.c
     ${TFT_PLUGIN_DIR}/ui_state.c
     ${TFT_PLUGIN_DIR}/ui_screen_manager.c
     ${TFT_PLUGIN_DIR}/ui_widgets.c
     ${TFT_PLUGIN_DIR}/screens/screen_main.c
     ${TFT_PLUGIN_DIR}/screens/screen_jog.c
     ${TFT_PLUGIN_DIR}/screens/screen_calibrate.c
+    ${TFT_PLUGIN_DIR}/screens/screen_files.c
+    ${TFT_PLUGIN_DIR}/screens/screen_job.c
     ${TFT_PLUGIN_DIR}/lib/TFT_eSPI/TFT_eSPI.cpp
     ${TFT_LVGL_SOURCES}
 )

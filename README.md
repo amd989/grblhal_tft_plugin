@@ -4,13 +4,12 @@ A touchscreen user interface plugin for grblHAL using LVGL and TFT_eSPI.
 
 ## Features
 
-- Full touchscreen interface for CNC/Laser control
-- Real-time position and status display
-- Manual jogging controls
-- Job running with progress display
-- WiFi configuration
-- Settings management
-- Multi-language support
+- Machine state with the alarm reason, work/machine position, Home, Unlock, Hold, Reset
+- Step jogging of X/Y/Z, set work zero
+- SD card file browser and job screen: progress, elapsed time, feed and spindle overrides, hold and stop
+- Touch calibration (`$TFTCAL`), saved across resets
+
+Planned: probing and spindle/coolant controls on the jog screen, job outline (frame), Wi-Fi status.
 
 ## Hardware Requirements
 
@@ -66,6 +65,7 @@ Edit `main/my_machine.h`:
 ```c
 #define BOARD_MY_MACHINE
 #define TFT_ENABLE 1
+#define SDCARD_ENABLE 1     // optional, for the Files and job screens
 ```
 
 The build stops with an error if `TFT_ENABLE` is used with the stock `BOARD_MKS_DLC32_V2P0` map.
@@ -87,6 +87,21 @@ Defaults for the MKS DLC32 v2.0/v2.1 with the MKS TS35 display live in `tft_conf
 ```
 
 See `tft_config.h` for the full list (pins, SPI frequencies, backlight PWM, LVGL buffer).
+
+## Running jobs from the SD card
+
+Needs `SDCARD_ENABLE` in `my_machine.h`. **Files** on the main screen lists folders and G-code files (`.nc`, `.ngc`, `.gcode`, `.tap`, `.txt` and the other extensions grblHAL's `$F` accepts). Hidden files and names longer than 40 characters are left out, grblHAL cannot run the latter. Opening the screen mounts the card, so a card inserted after boot works too.
+
+Tapping a file asks for confirmation, then runs it with `$F=<path>` from the current work zero. The machine must be idle. The job screen opens by itself whenever a job starts, also one started from a host:
+
+- progress, current line and elapsed time
+- feed and spindle override: -10%, back to 100%, +10%
+- Hold / Resume
+- Stop, tap twice: motion ramps down, spindle and coolant turn off, the job ends and the position is kept
+
+While a job runs, grblHAL ignores everything from the serial port except real-time commands (`?`, `!`, `~` and overrides), so a host like CNCjs can watch, hold and resume, but not send G-code.
+
+`examples/tft-test-air.nc` is a safe first job: ten 20 mm squares in X/Y with relative moves and the spindle off. Jog to the middle of the bed and raise Z before running it.
 
 ## Architecture
 

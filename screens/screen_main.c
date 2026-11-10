@@ -4,7 +4,7 @@
  * Part of grblHAL TFT Plugin
  *
  * Layout (480x320):
- *   top     machine state (colored), Jog, WPos/MPos toggle
+ *   top     machine state (colored), Files, Jog, WPos/MPos toggle
  *   middle  X/Y/Z position readout
  *   bottom  Home, Unlock, Hold/Resume, Reset
  *
@@ -102,6 +102,14 @@ static void on_coord (lv_obj_t *obj, lv_event_t event)
     }
 }
 
+static void on_files (lv_obj_t *obj, lv_event_t event)
+{
+    if(event == LV_EVENT_CLICKED) {
+        tft_log("btn files clicked");
+        ui_screen_manager_show(SCREEN_FILES);
+    }
+}
+
 static void on_jog (lv_obj_t *obj, lv_event_t event)
 {
     if(event == LV_EVENT_CLICKED) {
@@ -123,7 +131,8 @@ static void screen_create (lv_obj_t *parent)
     lbl_state = ui_widget_create_styled_label(parent, 16, 14, ui_widget_state_style(STATE_IDLE), "");
     txt_state[0] = '\0';
 
-    ui_widget_create_button(parent, 236, 8, 104, 44, "Jog", BUTTON_STYLE_PRIMARY, on_jog);
+    ui_widget_create_button(parent, 148, 8, 96, 44, "Files", BUTTON_STYLE_PRIMARY, on_files);
+    ui_widget_create_button(parent, 252, 8, 96, 44, "Jog", BUTTON_STYLE_PRIMARY, on_jog);
 
     // Alarm reason, empty unless in alarm
     lbl_reason = ui_widget_create_styled_label(parent, 16, 56, &s_reason, "");
@@ -131,7 +140,7 @@ static void screen_create (lv_obj_t *parent)
     lv_obj_set_width(lbl_reason, 452);
     txt_reason[0] = '\0';
 
-    lv_obj_t *btn = ui_widget_create_button(parent, 352, 8, 116, 44, "WPos", BUTTON_STYLE_DEFAULT, on_coord);
+    lv_obj_t *btn = ui_widget_create_button(parent, 356, 8, 112, 44, "WPos", BUTTON_STYLE_DEFAULT, on_coord);
     lbl_coord = lv_obj_get_child(btn, NULL);
     strcpy(txt_coord, "WPos");
 

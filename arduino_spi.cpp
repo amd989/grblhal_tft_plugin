@@ -37,8 +37,9 @@ void SPIClass::begin(int8_t sck, int8_t miso, int8_t mosi, int8_t ss)
     bus.quadhd_io_num = -1;
     bus.max_transfer_sz = TFT_SPI_MAX_TRANSFER;
 
-    // DMA for writeBytes(); single bytes and words still go via tx_data
-    if(spi_bus_initialize(TFT_SPI_HOST, &bus, SPI_DMA_CH_AUTO) != ESP_OK)
+    // DMA for writeBytes(); single bytes and words still go via tx_data.
+    // Channel 2: grblHAL asks for channel 1 for the SD card (spi.c).
+    if(spi_bus_initialize(TFT_SPI_HOST, &bus, SPI_DMA_CH2) != ESP_OK)
         return;
 
     if(freq_hz == 0)

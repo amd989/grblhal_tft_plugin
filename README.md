@@ -223,6 +223,12 @@ grblHAL runs commands from the screen silently (no `ok`/`error` reply). A comman
 - Check touch calibration
 - Enable debug output
 
+### Touches land off target
+
+Send `$TFTCAL` (machine idle or in alarm). Hold each red cross until it turns green: four corners, then the center as a check. The calibration is saved only if the center tap lands within 20 px, and is kept in the ESP32 NVS namespace `tft`, so `$RST` does not clear it. The screen gives up after 30 s without a touch.
+
+With `TFT_DEBUG` on, the result is logged as `[MSG:TFT cal x 3930..196 y 160..3875 swap 1 err 3]`. To make it the default for fresh boards, set `TFT_TOUCH_CAL_X0`, `_X1`, `_Y0`, `_Y1` and `_SWAP` in `my_machine.h`.
+
 ## License
 
 GPL v3 - same as grblHAL

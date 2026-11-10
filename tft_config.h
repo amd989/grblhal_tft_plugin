@@ -187,6 +187,25 @@ extern "C" {
 #define TFT_TOUCH_MIRROR_Y      0
 #endif
 
+// Touch calibration used until one is saved with $TFTCAL: raw XPT2046 values
+// at the screen edges (left, right, top, bottom), and whether the raw axes
+// are swapped. Measured on an MKS TS35 with $TFTCAL; other panels may differ.
+#ifndef TFT_TOUCH_CAL_X0
+#define TFT_TOUCH_CAL_X0        3930
+#endif
+#ifndef TFT_TOUCH_CAL_X1
+#define TFT_TOUCH_CAL_X1        196
+#endif
+#ifndef TFT_TOUCH_CAL_Y0
+#define TFT_TOUCH_CAL_Y0        160
+#endif
+#ifndef TFT_TOUCH_CAL_Y1
+#define TFT_TOUCH_CAL_Y1        3875
+#endif
+#ifndef TFT_TOUCH_CAL_SWAP
+#define TFT_TOUCH_CAL_SWAP      1
+#endif
+
 // Color Depth
 #define TFT_COLOR_DEPTH         16      // RGB565
 

@@ -38,6 +38,7 @@ typedef enum {
     SCREEN_FRAME,           // Border tracing
     SCREEN_LANGUAGE,        // Language selection
     SCREEN_FILE_INFO,       // File information dialog
+    SCREEN_CALIBRATE,       // Touch calibration
     SCREEN_COUNT            // Total number of screens
 } ui_screen_t;
 

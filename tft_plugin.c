@@ -36,6 +36,8 @@
 #include "ui_widgets.h"
 #include "screens/screen_main.h"
 #include "screens/screen_jog.h"
+#include "screens/screen_calibrate.h"
+#include "tft_touch.h"
 
 static on_report_options_ptr on_report_options;
 
@@ -53,6 +55,29 @@ static void tft_report_options(bool newopt) {
 }
 
 /*
+ * $TFTCAL: show the touch calibration screen. Not while the machine moves,
+ * saving to flash stalls both cores.
+ */
+static status_code_t tft_calibrate_cmd (sys_state_t state, char *args)
+{
+    if(!(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
+        return Status_IdleError;
+
+    tft_touch_request_calibration();
+
+    return Status_OK;
+}
+
+static const sys_command_t tft_command_list[] = {
+    { "TFTCAL", tft_calibrate_cmd, { .noargs = On, .allow_blocking = On }, { .str = "calibrate the TFT touchscreen" } }
+};
+
+static sys_commands_t tft_commands = {
+    .n_commands = sizeof(tft_command_list) / sizeof(sys_command_t),
+    .commands = tft_command_list
+};
+
+/*
  * UI Task - runs on Core 0, owns LVGL
  */
 static void tft_ui_task(void *param) {
@@ -64,6 +89,7 @@ static void tft_ui_task(void *param) {
     ui_widgets_init();
     screen_main_register();
     screen_jog_register();
+    screen_calibrate_register();
 
     // Breathing effect during startup (2 seconds)
     uint32_t splash_count = 0;
@@ -100,7 +126,8 @@ static void tft_ui_task(void *param) {
                 tft_backlight_on(255);  // Breathing can stop at any level
                 ui_screen_manager_show(SCREEN_MAIN);
             }
-        }
+        } else if(tft_touch_calibration_requested())
+            ui_screen_manager_show(SCREEN_CALIBRATE);
 
         // Update screen manager (calls current screen's update callback)
         ui_screen_manager_update();
@@ -123,6 +150,7 @@ void tft_plugin_init(void) {
 
     // Initialize LVGL graphics library
     lvgl_init();
+    tft_touch_init();
 
     // UI state cache and grblHAL link (command queue, state polling)
     ui_state_init();
@@ -141,6 +169,8 @@ void tft_plugin_init(void) {
 
     on_report_options = grbl.on_report_options;
     grbl.on_report_options = tft_report_options;
+
+    system_register_commands(&tft_commands);
 
     // Print initialization message
     hal.stream.write("[TFT Plugin initialized]" ASCII_EOL);

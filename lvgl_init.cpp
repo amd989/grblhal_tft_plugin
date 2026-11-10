@@ -13,6 +13,7 @@
 #include "tft_config.h"
 #include "tft_driver.h"
 #include "lvgl_init.h"
+#include "tft_touch.h"
 
 #if TFT_ENABLE
 
@@ -91,9 +92,8 @@ static bool lvgl_touch_read(lv_indev_drv_t *indev, lv_indev_data_t *data) {
     static uint16_t last_x = 0;
     static uint16_t last_y = 0;
 
-    // Read touch from TFT_eSPI (handles XPT2046 protocol). It returns screen
-    // coordinates for the current rotation, given native panel size in User_Setup.h.
-    boolean touched = tft.getTouch(&touchX, &touchY);
+    // Calibrated screen coordinates, clamped to the display
+    bool touched = tft_touch_read(&touchX, &touchY);
 
 #if TFT_DEBUG
     static bool was_touched = false;

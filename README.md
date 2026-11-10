@@ -15,7 +15,8 @@ A touchscreen user interface for [grblHAL](https://github.com/grblHAL) on the ES
 - Six macro buttons, set with `$450`-`$455`
 - CNC and laser: the same firmware adapts to laser mode (`$32=1`), see [Laser Mode](https://github.com/amd989/grblhal_tft_plugin/wiki/Laser-Mode)
 - Wi-Fi or Ethernet status with the IP address on the main screen
-- Touch calibration (`$TFTCAL`), saved across resets, and a click on each touch
+- Settings screen: brightness (`$456`), touch beep (`$457`), touch calibration, network and version info, see [Settings](https://github.com/amd989/grblhal_tft_plugin/wiki/Settings)
+- Touch calibration (`$TFTCAL` or Settings), saved across resets, and a click on each touch
 
 ## Hardware
 

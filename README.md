@@ -6,17 +6,19 @@ A touchscreen user interface for [grblHAL](https://github.com/grblHAL) on the ES
 
 ## Features
 
-- Machine state with the alarm reason, work/machine position, Home, Unlock, Hold, Reset
-- Jogging, set work zero, go to zero, Z probe with a touch plate, tool length measurement on a toolsetter, spindle on/off
+- A layout built around Jog: status bar, five tabs (Jog, Files, Probe, Macros, Tools), and an action bar with Hold, Home, Unlock and Reset, see [Screen Layout](https://github.com/amd989/grblhal_tft_plugin/wiki/Screen-Layout)
+- Machine state with the alarm reason, work/machine position
+- Jogging with diagonals and continuous jog, set work zero by tapping a position, go to zero, Z probe with a touch plate, tool length measurement on a toolsetter, spindle on/off
 - SD card file browser and job screen: progress, elapsed and remaining time, feed and spindle overrides, hold and stop
 - Frame: trace the outline of a file's X/Y moves before running it
 - Resume a job from a line, after a broken bit or a stop
 - Tool changes (M6): the screen asks for the next tool, Resume continues, with `$341=3` after measuring it on the toolsetter
 - Six macro buttons, set with `$450`-`$455`
 - CNC and laser: the same firmware adapts to laser mode (`$32=1`), see [Laser Mode](https://github.com/amd989/grblhal_tft_plugin/wiki/Laser-Mode)
-- Wi-Fi or Ethernet status with the IP address on the main screen
-- Settings screen: brightness (`$456`), touch beep (`$457`), touch calibration, network and version info, see [Settings](https://github.com/amd989/grblhal_tft_plugin/wiki/Settings)
-- Touch calibration (`$TFTCAL` or Settings), saved across resets, and a click on each touch
+- Wi-Fi status in the status bar (struck through while down) and a badge while a PC talks to the machine
+- Risky actions (spindle on, Stop, Reset) confirmed by tapping twice or holding 1 s (`$458`)
+- Tools tab: brightness (`$456`), touch beep (`$457`), touch calibration, network and version info, see [Settings](https://github.com/amd989/grblhal_tft_plugin/wiki/Settings)
+- Touch calibration (`$TFTCAL` or the Tools tab), saved across resets, and a click on each touch
 
 ## Hardware
 
@@ -81,6 +83,7 @@ They also run on every push, see `.github/workflows/tests.yml`. Details in [Deve
 - [Installation](https://github.com/amd989/grblhal_tft_plugin/wiki/Installation)
 - [Board Map and Wiring](https://github.com/amd989/grblhal_tft_plugin/wiki/Board-Map-and-Wiring): toolsetter or cycle start on J2, beeper, pins
 - [Configuration](https://github.com/amd989/grblhal_tft_plugin/wiki/Configuration): every option you can override in `my_machine.h`
+- [Screen Layout](https://github.com/amd989/grblhal_tft_plugin/wiki/Screen-Layout): status bar, tabs, action bar, confirming risky actions
 - [Jog and Probing](https://github.com/amd989/grblhal_tft_plugin/wiki/Jog-and-Probing)
 - [Running Jobs](https://github.com/amd989/grblhal_tft_plugin/wiki/Running-Jobs): SD card files, Frame, resume from line
 - [Tool Changes](https://github.com/amd989/grblhal_tft_plugin/wiki/Tool-Changes): M6 prompt and `$341=3` with a toolsetter

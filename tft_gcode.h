@@ -91,6 +91,8 @@ typedef struct {
     uint32_t target;            // 1-based line to resume from
     uint32_t line;              // line ends counted so far
     uint_fast8_t eol;           // line end characters in a row, at most 2
+    uint32_t ends;              // runs of line ends, for the line count
+    bool text;                  // any character other than a line end
     bool found;
 } tft_gcode_resume_t;
 

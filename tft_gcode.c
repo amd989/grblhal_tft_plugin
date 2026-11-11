@@ -233,7 +233,7 @@ void tft_gcode_modal_line (tft_gcode_modal_t *m, char *s)
                     m->plane = g10 / 10;
                 else if(g10 == 200 || g10 == 210)
                     m->inches = g10 == 200;
-                else if(g10 == 901 || g10 == 911)
+                else if(g10 == 900 || g10 == 910)
                     m->absolute = g10 == 900;
                 else if((g10 >= 540 && g10 <= 590 && g10 % 10 == 0) || g10 == 591 || g10 == 592 || g10 == 593)
                     m->wcs = g10;
@@ -303,6 +303,9 @@ long tft_gcode_resume_feed (tft_gcode_resume_t *r, const char *buf, size_t n)
             return (long)idx;
         }
         r->eol = (c == '\r' || c == '\n') ? (r->eol < 2 ? r->eol + 1 : 2) : 0;
+        if(r->eol == 1)
+            r->ends++;
+        r->text = r->text || r->eol == 0;
 
         char *line = tft_gcode_reader_char(&r->reader, c);
         if(line)
@@ -314,7 +317,8 @@ long tft_gcode_resume_feed (tft_gcode_resume_t *r, const char *buf, size_t n)
 
 uint32_t tft_gcode_resume_lines (const tft_gcode_resume_t *r)
 {
-    return r->line + (r->eol ? 0 : 1);
+    // Each run of line ends closes a line, text after the last one is one more
+    return r->ends + (r->text && r->eol == 0 ? 1 : 0);
 }
 
 static bool restore_write (tft_gcode_write_ptr write, void *ctx, const char *fmt, ...)

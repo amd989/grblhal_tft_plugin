@@ -137,19 +137,7 @@ void tft_macros_init (void)
 
 bool tft_macro_label (uint_fast8_t idx, char *buf, size_t size)
 {
-    if(idx >= TFT_N_MACROS || !macros.macro[idx][0] || !size)
-        return false;
-
-    const char *src = macros.macro[idx];
-    const char *bar = strchr(src, '|');
-    size_t len = bar ? (size_t)(bar - src) : strlen(src);
-
-    if(len >= size)
-        len = size - 1;
-    memcpy(buf, src, len);
-    buf[len] = '\0';
-
-    return true;
+    return idx < TFT_N_MACROS && tft_logic_macro_label(macros.macro[idx], buf, size);
 }
 
 bool tft_macro_run (uint_fast8_t idx)
@@ -161,11 +149,11 @@ bool tft_macro_run (uint_fast8_t idx)
 
     strcpy(copy, macros.macro[idx]);
 
-    const char *lines = strchr(copy, '|');
-    if(!lines || !lines[1])
+    const char *lines = tft_logic_macro_lines(copy);
+    if(!lines)
         return false;   // a label only
 
-    tft_send_lines(lines + 1);
+    tft_send_lines(lines);
 
     return true;
 }

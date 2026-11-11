@@ -22,6 +22,7 @@
 
 #include "tft_config.h"
 #include "tft_settings.h"
+#include "tft_logic.h"
 
 #define SETTING_BRIGHTNESS  Setting_UserDefined_6
 #define SETTING_BEEP        Setting_UserDefined_7
@@ -115,12 +116,7 @@ bool tft_settings_beep (void)
 
 void tft_settings_set_brightness (uint8_t percent)
 {
-    if(percent < TFT_BRIGHTNESS_MIN)
-        percent = TFT_BRIGHTNESS_MIN;
-    else if(percent > 100)
-        percent = 100;
-
-    req_brightness = percent;
+    req_brightness = tft_logic_brightness(percent);
 }
 
 void tft_settings_set_beep (bool on)

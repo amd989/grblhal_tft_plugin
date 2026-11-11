@@ -38,8 +38,6 @@
 #define CONFIRM_MS      3000
 #define DRO_AXES        (N_AXIS < 3 ? N_AXIS : 3)
 // Remaining time is extrapolated from the bytes done, once there is enough
-#define ETA_MIN_MS      15000
-#define ETA_MIN_PERMILLE 10
 
 static lv_style_t s_name, s_info, s_value, s_tool;
 
@@ -71,16 +69,6 @@ static void styles_init (void)
 
     lv_style_copy(&s_tool, &s_name);
     s_tool.text.color = UI_COLOR_WARNING;
-}
-
-static void format_time (char *buf, size_t size, uint32_t ms)
-{
-    uint32_t s = ms / 1000;
-
-    if(s >= 3600)
-        snprintf(buf, size, "%u:%02u:%02u", (unsigned)(s / 3600), (unsigned)(s / 60 % 60), (unsigned)(s % 60));
-    else
-        snprintf(buf, size, "%u:%02u", (unsigned)(s / 60), (unsigned)(s % 60));
 }
 
 static void disarm_stop (void)
@@ -233,15 +221,14 @@ static void screen_update (void)
         lv_bar_set_value(bar, pct, LV_ANIM_OFF);
     }
 
-    format_time(time, sizeof(time), job->elapsed_ms);
+    tft_logic_format_time(time, sizeof(time), job->elapsed_ms);
     int n = snprintf(buf, sizeof(buf), "%d%%   line %u   %s", pct, (unsigned)job->line_done, time);
 
     // Remaining time while running, from the average rate so far
-    if(!ended && job->size && job->pos_done < job->size && job->elapsed_ms >= ETA_MIN_MS &&
-        (uint64_t)job->pos_done * 1000 >= (uint64_t)job->size * ETA_MIN_PERMILLE) {
+    uint32_t ms;
+    if(!ended && tft_logic_eta(job->elapsed_ms, job->size, job->pos_done, &ms)) {
         char left[16];
-        uint32_t ms = (uint32_t)((uint64_t)job->elapsed_ms * (job->size - job->pos_done) / job->pos_done);
-        format_time(left, sizeof(left), ms);
+        tft_logic_format_time(left, sizeof(left), ms);
         snprintf(buf + n, sizeof(buf) - n, "   %s left", left);
     }
     ui_widget_set_text(lbl_info, txt_info, sizeof(txt_info), buf);

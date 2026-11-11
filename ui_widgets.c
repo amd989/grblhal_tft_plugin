@@ -8,6 +8,7 @@
 
 #include "tft_config.h"    // first, so my_machine.h comes before grblHAL config.h
 #include "ui_widgets.h"
+#include "tft_logic.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -174,12 +175,11 @@ void ui_widget_format_state(char *buf, size_t size) {
 
 void ui_widget_format_tool_change(char *buf, size_t size) {
 #if TOOLSETTER_ENABLE
-    if(ui_state.tc_mode == 3 && !ui_state.tls_pos_set) {
-        snprintf(buf, size, "T%d: toolsetter position not set!", (int)ui_state.tool_pending);
-        return;
-    }
+    bool setter_missing = ui_state.tc_mode == 3 && !ui_state.tls_pos_set;
+#else
+    bool setter_missing = false;
 #endif
-    snprintf(buf, size, "Change to T%d, then Resume", (int)ui_state.tool_pending);
+    tft_logic_format_tool_change(buf, size, ui_state.tool_pending, setter_missing);
 }
 
 lv_style_t *ui_widget_state_style(sys_state_t state) {

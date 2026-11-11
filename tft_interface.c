@@ -51,24 +51,8 @@
 // an alarm, a reset or a stop, and after a failed probe.
 #define TFT_CHAIN_TIMEOUT_MS    120000
 
-#define CMD_CHAINED     0x01    // wait for idle after the previous command
-#define CMD_PROBE       0x02    // clear the probe result before sending
-#define CMD_NEEDS_PROBE 0x04    // drop the chain unless the last probe succeeded
-#define CMD_TOOLSETTER  0x08    // probe with the toolsetter input, not the touch plate
-
-// Steps of a tool measurement. Their lines need machine state (G59.3, the
-// last probe position, the work offset), so they are built when sent.
-typedef enum {
-    Cmd_Line = 0,       // send line as is
-    Cmd_TlsSafeZ,       // up to the Z home position
-    Cmd_TlsXY,          // over the toolsetter (G59.3 X Y)
-    Cmd_TlsZ,           // down to the G59.3 Z start height
-    Cmd_TlsProbeFast,   // probe down TFT_PROBE_DISTANCE from there
-    Cmd_TlsRetract,     // 2 mm above the fast probe hit
-    Cmd_TlsProbeSlow,   // slow probe down to 3 mm below the fast hit
-    Cmd_TlsOffset,      // first tool: $TLR, later tools: G43.1 Z<offset>
-    Cmd_TlsSetHere      // save the current machine position as G59.3
-} cmd_kind_t;
+// Command flags (CMD_*) and tool measurement steps (cmd_kind_t) are in
+// tft_logic.h, which builds the lines.
 
 typedef struct {
     uint32_t queued_at;     // not handed to grblHAL before this time
@@ -144,69 +128,31 @@ static float probe_mpos_z (void)
     return (float)sys.probe_position[Z_AXIS] / settings.axis[Z_AXIS].steps_per_mm;
 }
 
-// Machine Z to work Z, tool length offset included, for G38.2 targets
-static float work_z (float mpos)
-{
-    return mpos - gc_get_offset(Z_AXIS, true);
-}
-
 // Build the line for a tool measurement step. False drops the chain.
 static bool build_tls_line (tft_cmd_t *cmd)
 {
     coord_system_data_t g59_3;
-    float pz = probe_mpos_z();
+    float mpos[N_AXIS];
 
     if(!settings_read_coord_data(CoordinateSystem_G59_3, &g59_3))
         return false;
 
-    switch((cmd_kind_t)cmd->kind) {
+    system_convert_array_steps_to_mpos(mpos, sys.position);
 
-        case Cmd_TlsSafeZ:
-            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 Z%.3f", sys.home_position[Z_AXIS]);
-            break;
+    tft_tls_t t = {
+        .z_home = sys.home_position[Z_AXIS],
+        .g59_3 = { g59_3.coord.values[X_AXIS], g59_3.coord.values[Y_AXIS], g59_3.coord.values[Z_AXIS] },
+        .probe_z = probe_mpos_z(),
+        .z_offset = gc_get_offset(Z_AXIS, true),
+        .tlo_ref_set = !!(sys.tlo_reference_set.mask & bit(Z_AXIS)),
+        .tlo_delta = (float)(sys.probe_position[Z_AXIS] - sys.tlo_reference[Z_AXIS]) / settings.axis[Z_AXIS].steps_per_mm,
+        .mpos = { mpos[X_AXIS], mpos[Y_AXIS], mpos[Z_AXIS] },
+        .distance = TFT_PROBE_DISTANCE,
+        .feed = TFT_PROBE_FEED,
+        .feed_slow = TFT_PROBE_FEED_SLOW
+    };
 
-        case Cmd_TlsXY:
-            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 X%.3f Y%.3f", g59_3.coord.values[X_AXIS], g59_3.coord.values[Y_AXIS]);
-            break;
-
-        case Cmd_TlsZ:
-            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 Z%.3f", g59_3.coord.values[Z_AXIS]);
-            break;
-
-        case Cmd_TlsProbeFast:
-            snprintf(cmd->line, sizeof(cmd->line), "G21 G90 G38.2 Z%.3f F%d",
-                      work_z(g59_3.coord.values[Z_AXIS] - TFT_PROBE_DISTANCE), TFT_PROBE_FEED);
-            break;
-
-        case Cmd_TlsRetract:
-            snprintf(cmd->line, sizeof(cmd->line), "G21 G53 G0 Z%.3f", pz + 2.0f);
-            break;
-
-        case Cmd_TlsProbeSlow:
-            snprintf(cmd->line, sizeof(cmd->line), "G21 G90 G38.2 Z%.3f F%d", work_z(pz - 3.0f), TFT_PROBE_FEED_SLOW);
-            break;
-
-        case Cmd_TlsOffset:
-            if(sys.tlo_reference_set.mask & bit(Z_AXIS))
-                snprintf(cmd->line, sizeof(cmd->line), "G21 G43.1 Z%.3f",
-                          (float)(sys.probe_position[Z_AXIS] - sys.tlo_reference[Z_AXIS]) / settings.axis[Z_AXIS].steps_per_mm);
-            else
-                strcpy(cmd->line, "$TLR");
-            break;
-
-        case Cmd_TlsSetHere:
-            {
-                float mpos[N_AXIS];
-                system_convert_array_steps_to_mpos(mpos, sys.position);
-                snprintf(cmd->line, sizeof(cmd->line), "G21 G10 L2 P9 X%.3f Y%.3f Z%.3f", mpos[X_AXIS], mpos[Y_AXIS], mpos[Z_AXIS]);
-            }
-            break;
-
-        default:
-            return false;
-    }
-
-    return true;
+    return tft_logic_tls_line((cmd_kind_t)cmd->kind, &t, cmd->line, sizeof(cmd->line));
 }
 
 // Pick the probe input for the next G38: toolsetter or touch plate
@@ -444,30 +390,17 @@ static void queue_command (const char *cmd, uint32_t delay_ms, uint8_t flags)
     queue_step(cmd, delay_ms, flags, Cmd_Line);
 }
 
+static void queue_steps (const tft_step_t *step, size_t count)
+{
+    for(size_t idx = 0; idx < count; idx++)
+        queue_command(step[idx].line, 0, step[idx].flags);
+}
+
 // Each line waits for the previous one to finish, see tft_interface.h
 void tft_send_lines(const char *lines) {
-    char line[TFT_CMD_MAX_LEN];
-    uint8_t flags = 0;
+    tft_step_t step[TFT_CMD_QUEUE_LEN];
 
-    while(lines && *lines) {
-        const char *end = strchr(lines, '|');
-        size_t len = end ? (size_t)(end - lines) : strlen(lines);
-
-        if(len >= sizeof(line))
-            len = sizeof(line) - 1;
-        memcpy(line, lines, len);
-        line[len] = '\0';
-
-        char *p = line;
-        while(*p == ' ')
-            p++;
-        if(*p) {
-            queue_command(p, 0, flags);
-            flags = CMD_CHAINED;
-        }
-
-        lines = end ? end + 1 : NULL;
-    }
+    queue_steps(step, tft_logic_split_lines(lines, step, TFT_CMD_QUEUE_LEN));
 }
 
 void tft_send_command(const char *cmd) {
@@ -534,14 +467,16 @@ static void queue_fmt (uint8_t flags, const char *fmt, ...)
  * the plate. Absolute moves only, so the distance mode is not left at G91.
  */
 void tft_probe_z(float work_z) {
-    const float plate = TFT_PROBE_THICKNESS;
+    const tft_probe_cfg_t cfg = {
+        .plate = TFT_PROBE_THICKNESS,
+        .distance = TFT_PROBE_DISTANCE,
+        .feed = TFT_PROBE_FEED,
+        .feed_slow = TFT_PROBE_FEED_SLOW,
+        .retract = TFT_PROBE_RETRACT
+    };
+    tft_step_t step[6];
 
-    queue_fmt(CMD_PROBE, "G21 G90 G38.2 Z%.3f F%d", work_z - TFT_PROBE_DISTANCE, TFT_PROBE_FEED);
-    queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G10 L20 P0 Z%.3f", plate);
-    queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G0 Z%.3f", plate + 2.0f);
-    queue_fmt(CMD_CHAINED|CMD_PROBE, "G38.2 Z%.3f F%d", plate - 3.0f, TFT_PROBE_FEED_SLOW);
-    queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G10 L20 P0 Z%.3f", plate);
-    queue_fmt(CMD_CHAINED|CMD_NEEDS_PROBE, "G0 Z%.3f", plate + TFT_PROBE_RETRACT);
+    queue_steps(step, tft_logic_probe_z(step, 6, work_z, &cfg));
 }
 
 #if TOOLSETTER_ENABLE
@@ -573,29 +508,17 @@ void tft_toolsetter_set_here(void) {
 #endif
 
 void tft_frame(float min_x, float min_y, float max_x, float max_y) {
-    const float corner[5][2] = {
-        { min_x, min_y }, { max_x, min_y }, { max_x, max_y }, { min_x, max_y }, { min_x, min_y }
-    };
+    // Laser: traced at low power, see tft_logic_frame()
+    float s = ui_state.laser_mode && TFT_LASER_FRAME_POWER > 0.0f ? laser_s(TFT_LASER_FRAME_POWER) : 0.0f;
+    tft_step_t step[6];
 
-    if(ui_state.laser_mode && TFT_LASER_FRAME_POWER > 0.0f) {
-        // Laser off to the first corner, then around at low power. M4 scales
-        // the power with speed, so the stops between the moves leave no dots.
-        queue_fmt(0, "G21 G90 G0 X%.3f Y%.3f", corner[0][0], corner[0][1]);
-        for(uint_fast8_t idx = 1; idx < 5; idx++)
-            queue_fmt(CMD_CHAINED, idx == 1 ? "G1 X%.3f Y%.3f F%d M4 S%.1f" : "G1 X%.3f Y%.3f",
-                       corner[idx][0], corner[idx][1], TFT_JOG_FEED, laser_s(TFT_LASER_FRAME_POWER));
-        queue_fmt(CMD_CHAINED, "M5 G0");
-        return;
-    }
-
-    for(uint_fast8_t idx = 0; idx < 5; idx++)
-        queue_fmt(idx ? CMD_CHAINED : 0, "$J=G90 G21 X%.3f Y%.3f F%d", corner[idx][0], corner[idx][1], TFT_JOG_FEED);
+    queue_steps(step, tft_logic_frame(step, 6, min_x, min_y, max_x, max_y, TFT_JOG_FEED, s));
 }
 
 // S word for a laser power in percent, from $30
 static float laser_s (float pct)
 {
-    return ui_state.spindle_max * pct / 100.0f;
+    return tft_logic_laser_s(ui_state.spindle_max, pct);
 }
 
 static volatile uint32_t laser_test_off_at;

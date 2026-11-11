@@ -168,7 +168,7 @@ static void open_resume (void)
 {
     const tft_sd_job_t *job = tft_sd_job();
 
-    from_line = !job->active && !job->finished && job->line_done && !strcmp(job->source, leaf_name(selected)) ? job->line_done : 1;
+    from_line = tft_logic_resume_default(job, leaf_name(selected));
     preparing = false;
     show_from_line();
     lv_label_set_text(lbl_resume_status, from_line > 1 ? "Last run stopped at this line" : "");

@@ -13,6 +13,7 @@
 #include "grbl/system.h"
 #include "grbl/settings.h"
 #include "tft_config.h"
+#include "tft_logic.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,8 +41,7 @@ void tft_log(const char *fmt, ...);
  * from its own loop.
  */
 
-// Longest command line, including $F=<path>
-#define TFT_CMD_MAX_LEN 128
+// Longest command line (TFT_CMD_MAX_LEN) is in tft_logic.h
 
 // Send raw G-code command
 void tft_send_command(const char *cmd);

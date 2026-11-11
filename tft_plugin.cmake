@@ -21,6 +21,8 @@ list(APPEND SRCS
     ${TFT_PLUGIN_DIR}/tft_touch.cpp
     ${TFT_PLUGIN_DIR}/tft_sd.c
     ${TFT_PLUGIN_DIR}/tft_macros.c
+    ${TFT_PLUGIN_DIR}/tft_gcode.c
+    ${TFT_PLUGIN_DIR}/tft_logic.c
     ${TFT_PLUGIN_DIR}/tft_settings.c
     ${TFT_PLUGIN_DIR}/ui_state.c
     ${TFT_PLUGIN_DIR}/ui_screen_manager.c

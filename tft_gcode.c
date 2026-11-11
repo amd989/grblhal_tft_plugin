@@ -155,7 +155,7 @@ void tft_gcode_bounds_line (tft_gcode_bounds_t *b, char *s)
 
             case 'G': {
                 int g = (int)value, g10 = (int)lroundf(value * 10.0f);
-                if(g10 == 900 || g10 == 910)
+                if(g10 == 901 || g10 == 911)
                     ;   // G90.1 / G91.1 arc center modes, IJ incremental assumed
                 else if(g <= 3)
                     b->motion = g;
@@ -233,7 +233,7 @@ void tft_gcode_modal_line (tft_gcode_modal_t *m, char *s)
                     m->plane = g10 / 10;
                 else if(g10 == 200 || g10 == 210)
                     m->inches = g10 == 200;
-                else if(g10 == 900 || g10 == 910)
+                else if(g10 == 901 || g10 == 911)
                     m->absolute = g10 == 900;
                 else if((g10 >= 540 && g10 <= 590 && g10 % 10 == 0) || g10 == 591 || g10 == 592 || g10 == 593)
                     m->wcs = g10;

@@ -47,6 +47,9 @@
 #ifndef TFT_BEEP_MS
 #define TFT_BEEP_MS             20      // Click length
 #endif
+#ifndef TFT_CONFIRM_HOLD
+#define TFT_CONFIRM_HOLD        0       // Default for $458: 0 tap twice, 1 hold 1 s
+#endif
 #ifndef TFT_BRIGHTNESS
 #define TFT_BRIGHTNESS          100     // Default backlight, percent ($456)
 #endif
@@ -63,6 +66,13 @@
 #endif
 #ifndef TFT_JOG_FEED_Z
 #define TFT_JOG_FEED_Z          300
+#endif
+// Continuous jog (step Cont.): how far one press may go, cancelled on release
+#ifndef TFT_JOG_CONT_DISTANCE
+#define TFT_JOG_CONT_DISTANCE   1000.0f
+#endif
+#ifndef TFT_JOG_CONT_DISTANCE_Z
+#define TFT_JOG_CONT_DISTANCE_Z 200.0f
 #endif
 
 // Z probe with a touch plate (jog screen): plate thickness in mm, how far

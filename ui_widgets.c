@@ -9,17 +9,19 @@
 #include "tft_config.h"    // first, so my_machine.h comes before grblHAL config.h
 #include "ui_widgets.h"
 #include "tft_logic.h"
+#include "tft_settings.h"
 #include <stdio.h>
 #include <string.h>
 
 // Button styles (LVGL v6)
-static lv_style_t style_btn_default_rel;
-static lv_style_t style_btn_default_pr;
-static lv_style_t style_btn_primary_rel;
-static lv_style_t style_btn_primary_pr;
-static lv_style_t style_btn_success_rel;
-static lv_style_t style_btn_warning_rel;
-static lv_style_t style_btn_danger_rel;
+static lv_style_t style_btn_default_rel, style_btn_default_pr;
+static lv_style_t style_btn_primary_rel, style_btn_primary_pr;
+static lv_style_t style_btn_success_rel, style_btn_success_pr;
+static lv_style_t style_btn_warning_rel, style_btn_warning_pr;
+static lv_style_t style_btn_danger_rel, style_btn_danger_pr;
+static lv_style_t style_btn_outline_danger_rel;
+static lv_style_t style_tab_rel, style_tab_pr, style_tab_sel;
+static lv_style_t style_panel, style_scrim;
 
 // Screen background
 static lv_style_t style_screen;
@@ -29,6 +31,15 @@ static lv_style_t style_state_idle;
 static lv_style_t style_state_run;
 static lv_style_t style_state_warn;
 static lv_style_t style_state_alarm;
+
+// Shared text styles, created on first use
+#define N_TEXT_STYLES 16
+static struct {
+    const lv_font_t *font;
+    lv_color_t color;
+    lv_style_t style;
+} text_styles[N_TEXT_STYLES];
+static uint_fast8_t n_text_styles;
 
 // Status bar components (stored for updates) - global storage for LVGL v6
 typedef struct {
@@ -48,55 +59,67 @@ typedef struct {
 
 static axis_display_data_t g_axis_displays[6] = {0};  // Support up to 6 axes
 
+static void fill (lv_style_t *style, const lv_style_t *from, lv_color_t body, lv_color_t border, lv_color_t text)
+{
+    lv_style_copy(style, from);
+    style->body.main_color = body;
+    style->body.grad_color = body;
+    style->body.border.color = border;
+    style->text.color = text;
+    style->image.color = text;
+    style->line.color = text;
+}
+
 /*
  * Initialize widget system (LVGL v6)
  */
 void ui_widgets_init(void) {
-    // Default button style - released
+    // Default button: dark fill, 2 px border, lighter when pressed. Lines
+    // drawn on buttons (the diagonal jog arrows) take the text color.
     lv_style_copy(&style_btn_default_rel, &lv_style_btn_rel);
-    style_btn_default_rel.body.main_color = LV_COLOR_MAKE(0x40, 0x40, 0x40);
-    style_btn_default_rel.body.grad_color = LV_COLOR_MAKE(0x40, 0x40, 0x40);
     style_btn_default_rel.body.border.width = 2;
-    style_btn_default_rel.body.border.color = LV_COLOR_MAKE(0x80, 0x80, 0x80);
-    style_btn_default_rel.body.radius = 8;
-    style_btn_default_rel.text.color = UI_COLOR_TEXT;
+    style_btn_default_rel.body.radius = 4;
+    style_btn_default_rel.body.shadow.width = 0;
+    style_btn_default_rel.body.opa = LV_OPA_COVER;
+    style_btn_default_rel.body.border.opa = LV_OPA_COVER;
+    style_btn_default_rel.body.padding.left = style_btn_default_rel.body.padding.right = 2;
+    style_btn_default_rel.body.padding.top = style_btn_default_rel.body.padding.bottom = 2;
+    style_btn_default_rel.body.padding.inner = 2;
+    style_btn_default_rel.text.font = UI_FONT_MEDIUM;
+    style_btn_default_rel.line.width = 3;
+    style_btn_default_rel.line.rounded = 1;
+    fill(&style_btn_default_rel, &style_btn_default_rel, UI_COLOR_SURFACE2, UI_COLOR_BORDER, UI_COLOR_TEXT);
+    fill(&style_btn_default_pr, &style_btn_default_rel, UI_COLOR_BORDER, UI_COLOR_TEXT_DIM, UI_COLOR_TEXT);
 
-    // Default button style - pressed
-    lv_style_copy(&style_btn_default_pr, &lv_style_btn_pr);
-    style_btn_default_pr.body.main_color = LV_COLOR_MAKE(0x60, 0x60, 0x60);
-    style_btn_default_pr.body.grad_color = LV_COLOR_MAKE(0x60, 0x60, 0x60);
-    style_btn_default_pr.body.border.width = 2;
-    style_btn_default_pr.body.border.color = LV_COLOR_MAKE(0x80, 0x80, 0x80);
-    style_btn_default_pr.body.radius = 8;
-    style_btn_default_pr.text.color = UI_COLOR_TEXT;
+    fill(&style_btn_primary_rel, &style_btn_default_rel, UI_COLOR_PRIMARY, UI_COLOR_PRIMARY, UI_COLOR_TEXT);
+    fill(&style_btn_primary_pr, &style_btn_default_rel, LV_COLOR_MAKE(0x10, 0x5C, 0xB0), UI_COLOR_PRIMARY, UI_COLOR_TEXT);
+    fill(&style_btn_success_rel, &style_btn_default_rel, UI_COLOR_SUCCESS, UI_COLOR_SUCCESS, UI_COLOR_BACKGROUND);
+    fill(&style_btn_success_pr, &style_btn_default_rel, LV_COLOR_MAKE(0x16, 0x76, 0x32), UI_COLOR_SUCCESS, UI_COLOR_TEXT);
+    fill(&style_btn_warning_rel, &style_btn_default_rel, UI_COLOR_WARNING, UI_COLOR_WARNING, UI_COLOR_BACKGROUND);
+    fill(&style_btn_warning_pr, &style_btn_default_rel, LV_COLOR_MAKE(0xB0, 0x72, 0x00), UI_COLOR_WARNING, UI_COLOR_BACKGROUND);
+    fill(&style_btn_danger_rel, &style_btn_default_rel, UI_COLOR_DANGER, UI_COLOR_DANGER, UI_COLOR_TEXT);
+    fill(&style_btn_danger_pr, &style_btn_default_rel, LV_COLOR_MAKE(0x9A, 0x20, 0x2A), UI_COLOR_DANGER, UI_COLOR_TEXT);
+    fill(&style_btn_outline_danger_rel, &style_btn_default_rel, UI_COLOR_SURFACE2, UI_COLOR_DANGER, UI_COLOR_DANGER_TEXT);
 
-    // Primary button style (blue)
-    lv_style_copy(&style_btn_primary_rel, &style_btn_default_rel);
-    style_btn_primary_rel.body.main_color = UI_COLOR_PRIMARY;
-    style_btn_primary_rel.body.grad_color = UI_COLOR_PRIMARY;
-    style_btn_primary_rel.body.border.color = UI_COLOR_PRIMARY;
+    // Tabs: flat, the selected one lighter with a blue edge on the left
+    fill(&style_tab_rel, &style_btn_default_rel, UI_COLOR_SURFACE, UI_COLOR_SURFACE, UI_COLOR_TEXT_DIM);
+    style_tab_rel.body.radius = 0;
+    style_tab_rel.body.border.width = 0;
+    style_tab_rel.text.font = UI_FONT_SMALL;
+    fill(&style_tab_pr, &style_tab_rel, UI_COLOR_BORDER, UI_COLOR_BORDER, UI_COLOR_TEXT);
+    fill(&style_tab_sel, &style_tab_rel, UI_COLOR_SURFACE2, UI_COLOR_PRIMARY, UI_COLOR_TEXT);
+    style_tab_sel.body.border.width = 4;
+    style_tab_sel.body.border.part = LV_BORDER_LEFT;
 
-    lv_style_copy(&style_btn_primary_pr, &style_btn_default_pr);
-    style_btn_primary_pr.body.main_color = LV_COLOR_MAKE(0x00, 0x5B, 0xDF);
-    style_btn_primary_pr.body.grad_color = LV_COLOR_MAKE(0x00, 0x5B, 0xDF);
+    // Panels and position cells
+    fill(&style_panel, &style_btn_default_rel, UI_COLOR_SURFACE, UI_COLOR_SURFACE, UI_COLOR_TEXT);
+    style_panel.body.border.width = 0;
 
-    // Success button style (green)
-    lv_style_copy(&style_btn_success_rel, &style_btn_default_rel);
-    style_btn_success_rel.body.main_color = UI_COLOR_SUCCESS;
-    style_btn_success_rel.body.grad_color = UI_COLOR_SUCCESS;
-    style_btn_success_rel.body.border.color = UI_COLOR_SUCCESS;
-
-    // Warning button style (orange)
-    lv_style_copy(&style_btn_warning_rel, &style_btn_default_rel);
-    style_btn_warning_rel.body.main_color = UI_COLOR_WARNING;
-    style_btn_warning_rel.body.grad_color = UI_COLOR_WARNING;
-    style_btn_warning_rel.body.border.color = UI_COLOR_WARNING;
-
-    // Danger button style (red)
-    lv_style_copy(&style_btn_danger_rel, &style_btn_default_rel);
-    style_btn_danger_rel.body.main_color = UI_COLOR_DANGER;
-    style_btn_danger_rel.body.grad_color = UI_COLOR_DANGER;
-    style_btn_danger_rel.body.border.color = UI_COLOR_DANGER;
+    lv_style_copy(&style_scrim, &lv_style_plain);
+    style_scrim.body.main_color = LV_COLOR_BLACK;
+    style_scrim.body.grad_color = LV_COLOR_BLACK;
+    style_scrim.body.opa = LV_OPA_70;
+    style_scrim.body.radius = 0;
 
     // Screen background
     lv_style_copy(&style_screen, &lv_style_plain);
@@ -119,28 +142,64 @@ void ui_widgets_init(void) {
 }
 
 void ui_widget_set_button_style(lv_obj_t *btn, ui_button_style_t style) {
+    const lv_style_t *rel, *pr;
+
     switch(style) {
-        case BUTTON_STYLE_PRIMARY:
-            lv_btn_set_style(btn, LV_BTN_STYLE_REL, &style_btn_primary_rel);
-            lv_btn_set_style(btn, LV_BTN_STYLE_PR, &style_btn_primary_pr);
-            break;
-        case BUTTON_STYLE_SUCCESS:
-            lv_btn_set_style(btn, LV_BTN_STYLE_REL, &style_btn_success_rel);
-            lv_btn_set_style(btn, LV_BTN_STYLE_PR, &style_btn_default_pr);
-            break;
-        case BUTTON_STYLE_WARNING:
-            lv_btn_set_style(btn, LV_BTN_STYLE_REL, &style_btn_warning_rel);
-            lv_btn_set_style(btn, LV_BTN_STYLE_PR, &style_btn_default_pr);
-            break;
-        case BUTTON_STYLE_DANGER:
-            lv_btn_set_style(btn, LV_BTN_STYLE_REL, &style_btn_danger_rel);
-            lv_btn_set_style(btn, LV_BTN_STYLE_PR, &style_btn_default_pr);
-            break;
-        default:
-            lv_btn_set_style(btn, LV_BTN_STYLE_REL, &style_btn_default_rel);
-            lv_btn_set_style(btn, LV_BTN_STYLE_PR, &style_btn_default_pr);
-            break;
+        case BUTTON_STYLE_PRIMARY:        rel = &style_btn_primary_rel; pr = &style_btn_primary_pr; break;
+        case BUTTON_STYLE_SUCCESS:        rel = &style_btn_success_rel; pr = &style_btn_success_pr; break;
+        case BUTTON_STYLE_WARNING:        rel = &style_btn_warning_rel; pr = &style_btn_warning_pr; break;
+        case BUTTON_STYLE_DANGER:         rel = &style_btn_danger_rel;  pr = &style_btn_danger_pr; break;
+        case BUTTON_STYLE_OUTLINE_DANGER: rel = &style_btn_outline_danger_rel; pr = &style_btn_danger_pr; break;
+        case BUTTON_STYLE_TAB:            rel = &style_tab_rel; pr = &style_tab_pr; break;
+        case BUTTON_STYLE_TAB_SELECTED:   rel = &style_tab_sel; pr = &style_tab_pr; break;
+        case BUTTON_STYLE_PANEL:          rel = &style_panel; pr = &style_btn_default_pr; break;
+        default:                          rel = &style_btn_default_rel; pr = &style_btn_default_pr; break;
     }
+
+    lv_btn_set_style(btn, LV_BTN_STYLE_REL, rel);
+    lv_btn_set_style(btn, LV_BTN_STYLE_PR, pr);
+}
+
+lv_obj_t *ui_widget_create_panel(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h) {
+    lv_obj_t *panel = lv_obj_create(parent, NULL);
+
+    lv_obj_set_style(panel, &style_panel);
+    lv_obj_set_pos(panel, x, y);
+    lv_obj_set_size(panel, w, h);
+    lv_obj_set_click(panel, false);
+
+    return panel;
+}
+
+lv_obj_t *ui_widget_create_scrim(lv_obj_t *parent) {
+    lv_obj_t *scrim = lv_obj_create(parent, NULL);
+
+    lv_obj_set_style(scrim, &style_scrim);
+    lv_obj_set_pos(scrim, UI_TABS_W, UI_STATUS_H);
+    lv_obj_set_size(scrim, UI_ACTION_X - UI_TABS_W, TFT_DISPLAY_HEIGHT - UI_STATUS_H);
+    lv_obj_set_click(scrim, true);  // swallows touches meant for what is under it
+
+    return scrim;
+}
+
+lv_style_t *ui_widget_text_style(const lv_font_t *font, lv_color_t color) {
+    for(uint_fast8_t idx = 0; idx < n_text_styles; idx++) {
+        if(text_styles[idx].font == font && text_styles[idx].color.full == color.full)
+            return &text_styles[idx].style;
+    }
+
+    if(n_text_styles == N_TEXT_STYLES)
+        return &style_screen;   // out of slots: still readable
+
+    lv_style_t *style = &text_styles[n_text_styles].style;
+    text_styles[n_text_styles].font = font;
+    text_styles[n_text_styles].color = color;
+    n_text_styles++;
+    lv_style_copy(style, &lv_style_plain);
+    style->text.font = font;
+    style->text.color = color;
+
+    return style;
 }
 
 lv_style_t *ui_widget_screen_style(void) {
@@ -467,4 +526,156 @@ lv_obj_t* ui_widget_create_container(lv_obj_t *parent, lv_coord_t x, lv_coord_t 
     lv_obj_set_style(container, &container_style);
 
     return container;
+}
+
+/*
+ * Confirm button
+ */
+
+#define N_CONFIRM_BTNS 8
+
+static ui_confirm_btn_t *confirm_btns[N_CONFIRM_BTNS];
+static lv_style_t style_fill_bg, style_fill_indic;
+
+static tft_confirm_mode_t confirm_mode (void)
+{
+    return tft_settings_confirm_hold() ? Confirm_Hold : Confirm_TapTwice;
+}
+
+static void on_confirm_btn (lv_obj_t *obj, lv_event_t event)
+{
+    ui_confirm_btn_t *cb = NULL;
+    uint32_t now = lv_tick_get();
+
+    for(uint_fast8_t idx = 0; idx < N_CONFIRM_BTNS && !cb; idx++) {
+        if(confirm_btns[idx] && confirm_btns[idx]->btn == obj)
+            cb = confirm_btns[idx];
+    }
+    if(!cb)
+        return;
+
+    bool fire = false;
+
+    if(event == LV_EVENT_PRESSED) {
+        if(!cb->direct)     // direct: the tap alone runs it
+            tft_logic_confirm_event(&cb->confirm, Confirm_Press, now);
+    }
+    else if(event == LV_EVENT_RELEASED || event == LV_EVENT_PRESS_LOST)
+        tft_logic_confirm_event(&cb->confirm, Confirm_Release, now);
+    else if(event == LV_EVENT_CLICKED) {
+        if(cb->direct) {
+            tft_logic_confirm_cancel(&cb->confirm);
+            fire = true;
+        } else
+            fire = tft_logic_confirm_event(&cb->confirm, Confirm_Click, now);
+    } else
+        return;
+
+    if(fire && cb->fire)
+        cb->fire();
+
+    ui_confirm_btn_update(cb);
+}
+
+void ui_confirm_btn_create (ui_confirm_btn_t *cb, lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
+                            lv_coord_t w, lv_coord_t h, const char *text, ui_button_style_t style,
+                            void (*fire)(void))
+{
+    static bool styled = false;
+
+    if(!styled) {
+        styled = true;
+        lv_style_copy(&style_fill_bg, &lv_style_plain);
+        style_fill_bg.body.opa = LV_OPA_TRANSP;
+        style_fill_bg.body.border.width = 0;
+        style_fill_bg.body.padding.left = style_fill_bg.body.padding.right = 0;
+        style_fill_bg.body.padding.top = style_fill_bg.body.padding.bottom = 0;
+        lv_style_copy(&style_fill_indic, &style_fill_bg);
+        style_fill_indic.body.opa = LV_OPA_COVER;
+        style_fill_indic.body.main_color = UI_COLOR_WARNING;
+        style_fill_indic.body.grad_color = UI_COLOR_WARNING;
+        style_fill_indic.body.radius = 2;
+    }
+
+    memset(cb, 0, sizeof(*cb));
+    cb->text = text;
+    cb->style = style;
+    cb->fire = fire;
+    cb->shown = -1;
+    tft_logic_confirm_init(&cb->confirm, confirm_mode());
+
+    cb->btn = lv_btn_create(parent, NULL);
+    lv_obj_set_pos(cb->btn, x, y);
+    lv_obj_set_size(cb->btn, w, h);
+    lv_btn_set_layout(cb->btn, LV_LAYOUT_OFF);
+    ui_widget_set_button_style(cb->btn, style);
+    lv_obj_set_event_cb(cb->btn, on_confirm_btn);
+
+    cb->label = lv_label_create(cb->btn, NULL);
+    lv_label_set_align(cb->label, LV_LABEL_ALIGN_CENTER);
+    lv_label_set_text(cb->label, text);
+    lv_obj_set_auto_realign(cb->label, true);
+    lv_obj_align(cb->label, NULL, LV_ALIGN_CENTER, 0, 0);
+
+    // Hold progress along the bottom edge
+    cb->bar = lv_bar_create(cb->btn, NULL);
+    lv_obj_set_size(cb->bar, w - 12, 6);
+    lv_obj_align(cb->bar, NULL, LV_ALIGN_IN_BOTTOM_MID, 0, -5);
+    lv_bar_set_range(cb->bar, 0, 100);
+    lv_bar_set_style(cb->bar, LV_BAR_STYLE_BG, &style_fill_bg);
+    lv_bar_set_style(cb->bar, LV_BAR_STYLE_INDIC, &style_fill_indic);
+    lv_obj_set_click(cb->bar, false);
+    lv_obj_set_hidden(cb->bar, true);
+
+    for(uint_fast8_t idx = 0; idx < N_CONFIRM_BTNS; idx++) {
+        if(!confirm_btns[idx] || confirm_btns[idx] == cb) {
+            confirm_btns[idx] = cb;
+            break;
+        }
+    }
+}
+
+void ui_confirm_btn_set (ui_confirm_btn_t *cb, const char *text, ui_button_style_t style, bool direct)
+{
+    if(cb->text != text || cb->style != style)
+        cb->shown = -1;
+    cb->text = text;
+    cb->style = style;
+    cb->direct = direct;
+}
+
+void ui_confirm_btn_cancel (ui_confirm_btn_t *cb)
+{
+    tft_logic_confirm_cancel(&cb->confirm);
+    ui_confirm_btn_update(cb);
+}
+
+void ui_confirm_btn_update (ui_confirm_btn_t *cb)
+{
+    uint32_t now = lv_tick_get();
+    tft_confirm_mode_t mode = confirm_mode();
+
+    if(mode != cb->confirm.mode) {
+        tft_logic_confirm_init(&cb->confirm, mode);
+        cb->shown = -1;
+    }
+
+    if(tft_logic_confirm_tick(&cb->confirm, now) && cb->fire)
+        cb->fire();     // held long enough
+
+    // 0 normal, 1 armed (second tap), 2 holding
+    int8_t look = cb->confirm.armed ? 1 : cb->confirm.pressing ? 2 : 0;
+    uint8_t pct = tft_logic_confirm_progress(&cb->confirm, now);
+
+    if(look != cb->shown) {
+        cb->shown = look;
+        ui_widget_set_button_style(cb->btn, look == 1 ? BUTTON_STYLE_WARNING : cb->style);
+        lv_label_set_text(cb->label, look == 1 ? "Sure?" : cb->text);
+        lv_obj_set_hidden(cb->bar, look != 2);
+    }
+
+    if(look == 2 && pct != cb->shown_pct) {
+        cb->shown_pct = pct;
+        lv_bar_set_value(cb->bar, pct, LV_ANIM_OFF);
+    }
 }

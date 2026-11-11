@@ -37,13 +37,14 @@
 #include "ui_state.h"
 #include "ui_screen_manager.h"
 #include "ui_widgets.h"
-#include "screens/screen_main.h"
 #include "screens/screen_jog.h"
 #include "screens/screen_calibrate.h"
 #include "screens/screen_files.h"
 #include "screens/screen_job.h"
 #include "screens/screen_macros.h"
-#include "screens/screen_settings.h"
+#include "screens/screen_probe.h"
+#include "screens/screen_tools.h"
+#include "ui_chrome.h"
 #include "tft_macros.h"
 #include "tft_settings.h"
 #include "tft_sd.h"
@@ -114,13 +115,14 @@ static void tft_ui_task(void *param) {
     // Initialize foundation components
     ui_screen_manager_init();
     ui_widgets_init();
-    screen_main_register();
     screen_jog_register();
     screen_calibrate_register();
     screen_files_register();
     screen_job_register();
     screen_macros_register();
-    screen_settings_register();
+    screen_probe_register();
+    screen_tools_register();
+    ui_chrome_init();
 
     uint32_t job_seq = tft_sd_job()->seq;
     uint8_t brightness = 0;     // applied $456, 0 until the splash ends
@@ -157,7 +159,7 @@ static void tft_ui_task(void *param) {
 
             // After splash, show main screen
             if(splash_count == splash_duration - 1)
-                ui_screen_manager_show(SCREEN_MAIN);
+                ui_screen_manager_show(SCREEN_HOME);
         } else {
             // Brightness ($456): breathing stops at any level, so set it once
             // the splash has ended, then on each change. The Settings screen
@@ -177,6 +179,9 @@ static void tft_ui_task(void *param) {
         }
 
         tft_beep_service();
+
+        // Status bar, tabs and action bar
+        ui_chrome_update();
 
         // Update screen manager (calls current screen's update callback)
         ui_screen_manager_update();

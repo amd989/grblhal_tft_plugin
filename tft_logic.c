@@ -296,3 +296,121 @@ bool tft_logic_tls_line (cmd_kind_t kind, const tft_tls_t *t, char *buf, size_t 
 
     return true;
 }
+
+/*
+ * Jogging
+ */
+
+static const float step_mm[TFT_STEP_COUNT] = { 0.1f, 1.0f, 10.0f, 100.0f, 0.0f };
+static const char *const step_text[TFT_STEP_COUNT] = { "0.1", "1", "10", "100", "Cont." };
+
+uint8_t tft_logic_step_next (uint8_t idx, int dir)
+{
+    if(idx >= TFT_STEP_COUNT)
+        return 1;
+
+    return dir < 0 ? (idx ? idx - 1 : TFT_STEP_COUNT - 1) : (idx + 1) % TFT_STEP_COUNT;
+}
+
+float tft_logic_step_mm (uint8_t idx)
+{
+    return idx < TFT_STEP_COUNT ? step_mm[idx] : 0.0f;
+}
+
+const char *tft_logic_step_text (uint8_t idx)
+{
+    return idx < TFT_STEP_COUNT ? step_text[idx] : "";
+}
+
+bool tft_logic_jog_line (char *buf, size_t size, float dx, float dy, float dz, int feed)
+{
+    const float d[3] = { dx, dy, dz };
+    int n = snprintf(buf, size, "$J=G91 G21");
+    bool moves = false;
+
+    for(uint_fast8_t idx = 0; idx < 3; idx++) {
+        if(d[idx] != 0.0f && n > 0 && (size_t)n < size) {
+            n += snprintf(buf + n, size - n, " %c%.3f", 'X' + idx, d[idx]);
+            moves = true;
+        }
+    }
+    if(n > 0 && (size_t)n < size)
+        snprintf(buf + n, size - n, " F%d", feed);
+
+    return moves;
+}
+
+bool tft_logic_zero_line (char *buf, size_t size, uint8_t mask)
+{
+    int n = snprintf(buf, size, "G10 L20 P0");
+
+    for(uint_fast8_t idx = 0; idx < 3; idx++) {
+        if((mask & (1 << idx)) && n > 0 && (size_t)n < size)
+            n += snprintf(buf + n, size - n, " %c0", 'X' + idx);
+    }
+
+    return (mask & 0x07) != 0;
+}
+
+/*
+ * Confirming
+ */
+
+void tft_logic_confirm_init (tft_confirm_t *c, tft_confirm_mode_t mode)
+{
+    memset(c, 0, sizeof(*c));
+    c->mode = mode;
+}
+
+void tft_logic_confirm_cancel (tft_confirm_t *c)
+{
+    c->armed = c->pressing = false;
+}
+
+bool tft_logic_confirm_event (tft_confirm_t *c, tft_confirm_event_t event, uint32_t now)
+{
+    if(c->mode == Confirm_Hold) {
+        if(event == Confirm_Press) {
+            c->pressing = true;
+            c->since = now;
+        } else if(event == Confirm_Release)
+            c->pressing = false;
+        return false;   // fires from the tick, once held long enough
+    }
+
+    if(event != Confirm_Click)
+        return false;
+
+    if(c->armed && now - c->since <= TFT_CONFIRM_MS) {
+        c->armed = false;
+        return true;
+    }
+
+    c->armed = true;
+    c->since = now;
+
+    return false;
+}
+
+bool tft_logic_confirm_tick (tft_confirm_t *c, uint32_t now)
+{
+    if(c->mode == Confirm_Hold) {
+        if(c->pressing && now - c->since >= TFT_HOLD_MS) {
+            c->pressing = false;    // once per press
+            return true;
+        }
+    } else if(c->armed && now - c->since > TFT_CONFIRM_MS)
+        c->armed = false;
+
+    return false;
+}
+
+uint8_t tft_logic_confirm_progress (const tft_confirm_t *c, uint32_t now)
+{
+    if(c->mode != Confirm_Hold || !c->pressing)
+        return 0;
+
+    uint32_t held = now - c->since;
+
+    return held >= TFT_HOLD_MS ? 100 : (uint8_t)(held * 100 / TFT_HOLD_MS);
+}

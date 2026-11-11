@@ -8,6 +8,7 @@
 
 #include "tft_config.h"    // first, so my_machine.h comes before grblHAL config.h
 #include "ui_screen_manager.h"
+#include "ui_chrome.h"
 #include <string.h>
 
 // Screen registry (static array for all possible screens)
@@ -103,6 +104,9 @@ void ui_screen_manager_show(ui_screen_t screen_id) {
 
     new_handler->visible = true;
     current_screen_id = screen_id;
+
+    // Status bar, tabs and action bar for this screen
+    ui_chrome_set_screen(screen_id);
 
     // Update UI state
     ui_state_set_screen(screen_id);

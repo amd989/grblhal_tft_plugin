@@ -321,6 +321,126 @@ TEST(toolsetter_plain_line_is_not_built)
     CHECK(!tft_logic_tls_line(Cmd_Line, &tls, buf, sizeof(buf)));
 }
 
+/*
+ * Jogging
+ */
+
+TEST(step_cycle)
+{
+    CHECK_INT(tft_logic_step_next(0, 1), 1);
+    CHECK_INT(tft_logic_step_next(3, 1), TFT_STEP_CONT);
+    CHECK_INT(tft_logic_step_next(TFT_STEP_CONT, 1), 0);    // wraps to 0.1
+    CHECK_INT(tft_logic_step_next(0, -1), TFT_STEP_CONT);   // long press goes back
+    CHECK_INT(tft_logic_step_next(2, -1), 1);
+    CHECK_INT(tft_logic_step_next(99, 1), 1);               // bad index: 1 mm
+}
+
+TEST(step_values)
+{
+    CHECK_FLOAT(tft_logic_step_mm(0), 0.1);
+    CHECK_FLOAT(tft_logic_step_mm(3), 100);
+    CHECK_FLOAT(tft_logic_step_mm(TFT_STEP_CONT), 0);
+    CHECK_STR(tft_logic_step_text(1), "1");
+    CHECK_STR(tft_logic_step_text(TFT_STEP_CONT), "Cont.");
+    CHECK_STR(tft_logic_step_text(99), "");
+}
+
+TEST(jog_lines)
+{
+    char buf[TFT_CMD_MAX_LEN];
+
+    CHECK(tft_logic_jog_line(buf, sizeof(buf), 1.0f, 0.0f, 0.0f, 1000));
+    CHECK_STR(buf, "$J=G91 G21 X1.000 F1000");
+    CHECK(tft_logic_jog_line(buf, sizeof(buf), -10.0f, 10.0f, 0.0f, 1000));
+    CHECK_STR(buf, "$J=G91 G21 X-10.000 Y10.000 F1000");
+    CHECK(tft_logic_jog_line(buf, sizeof(buf), 0.0f, 0.0f, -0.1f, 300));
+    CHECK_STR(buf, "$J=G91 G21 Z-0.100 F300");
+    CHECK(!tft_logic_jog_line(buf, sizeof(buf), 0.0f, 0.0f, 0.0f, 300));
+}
+
+TEST(zero_lines)
+{
+    char buf[32];
+
+    CHECK(tft_logic_zero_line(buf, sizeof(buf), 0x01)); CHECK_STR(buf, "G10 L20 P0 X0");
+    CHECK(tft_logic_zero_line(buf, sizeof(buf), 0x03)); CHECK_STR(buf, "G10 L20 P0 X0 Y0");
+    CHECK(tft_logic_zero_line(buf, sizeof(buf), 0x04)); CHECK_STR(buf, "G10 L20 P0 Z0");
+    CHECK(tft_logic_zero_line(buf, sizeof(buf), 0x07)); CHECK_STR(buf, "G10 L20 P0 X0 Y0 Z0");
+    CHECK(!tft_logic_zero_line(buf, sizeof(buf), 0));
+}
+
+/*
+ * Confirming
+ */
+
+TEST(confirm_tap_twice)
+{
+    tft_confirm_t c;
+
+    tft_logic_confirm_init(&c, Confirm_TapTwice);
+    CHECK(!tft_logic_confirm_event(&c, Confirm_Press, 1000));
+    CHECK(!tft_logic_confirm_event(&c, Confirm_Click, 1000));   // arms
+    CHECK(c.armed);
+    CHECK(!tft_logic_confirm_tick(&c, 2000));
+    CHECK(tft_logic_confirm_event(&c, Confirm_Click, 3500));    // second tap fires
+    CHECK(!c.armed);
+    CHECK(!tft_logic_confirm_event(&c, Confirm_Click, 3600));   // and starts over
+}
+
+TEST(confirm_tap_twice_times_out)
+{
+    tft_confirm_t c;
+
+    tft_logic_confirm_init(&c, Confirm_TapTwice);
+    tft_logic_confirm_event(&c, Confirm_Click, 0);
+    tft_logic_confirm_tick(&c, TFT_CONFIRM_MS + 1);
+    CHECK(!c.armed);
+    CHECK(!tft_logic_confirm_event(&c, Confirm_Click, TFT_CONFIRM_MS + 2));  // arms again
+
+    // Without a tick in between, a late second tap still does not fire
+    tft_logic_confirm_init(&c, Confirm_TapTwice);
+    tft_logic_confirm_event(&c, Confirm_Click, 0);
+    CHECK(!tft_logic_confirm_event(&c, Confirm_Click, TFT_CONFIRM_MS + 500));
+}
+
+TEST(confirm_hold)
+{
+    tft_confirm_t c;
+
+    tft_logic_confirm_init(&c, Confirm_Hold);
+    CHECK(!tft_logic_confirm_event(&c, Confirm_Click, 0));      // taps do nothing
+    CHECK(!tft_logic_confirm_event(&c, Confirm_Press, 100));
+    CHECK_INT(tft_logic_confirm_progress(&c, 600), 50);
+    CHECK(!tft_logic_confirm_tick(&c, 1099));
+    CHECK(tft_logic_confirm_tick(&c, 1100));                    // held 1 s
+    CHECK(!tft_logic_confirm_tick(&c, 1500));                   // only once
+    CHECK_INT(tft_logic_confirm_progress(&c, 1500), 0);
+    CHECK(!tft_logic_confirm_event(&c, Confirm_Release, 1600));
+}
+
+TEST(confirm_hold_released_early)
+{
+    tft_confirm_t c;
+
+    tft_logic_confirm_init(&c, Confirm_Hold);
+    tft_logic_confirm_event(&c, Confirm_Press, 0);
+    tft_logic_confirm_event(&c, Confirm_Release, 900);
+    CHECK(!tft_logic_confirm_tick(&c, 2000));
+    CHECK_INT(tft_logic_confirm_progress(&c, 2000), 0);
+}
+
+TEST(confirm_cancel_and_tick_wrap)
+{
+    tft_confirm_t c;
+
+    tft_logic_confirm_init(&c, Confirm_TapTwice);
+    tft_logic_confirm_event(&c, Confirm_Click, 0xFFFFFF00u);
+    CHECK(tft_logic_confirm_event(&c, Confirm_Click, 0x00000100u));    // across the tick wrap
+    tft_logic_confirm_event(&c, Confirm_Click, 10);
+    tft_logic_confirm_cancel(&c);
+    CHECK(!tft_logic_confirm_event(&c, Confirm_Click, 20));
+}
+
 void test_logic_suite (void)
 {
     static const test_case_t tests[] = {
@@ -348,6 +468,15 @@ void test_logic_suite (void)
         TEST_CASE(toolsetter_lines),
         TEST_CASE(toolsetter_first_tool_sets_reference),
         TEST_CASE(toolsetter_plain_line_is_not_built),
+        TEST_CASE(step_cycle),
+        TEST_CASE(step_values),
+        TEST_CASE(jog_lines),
+        TEST_CASE(zero_lines),
+        TEST_CASE(confirm_tap_twice),
+        TEST_CASE(confirm_tap_twice_times_out),
+        TEST_CASE(confirm_hold),
+        TEST_CASE(confirm_hold_released_early),
+        TEST_CASE(confirm_cancel_and_tick_wrap),
     };
 
     RUN_SUITE("logic", tests);

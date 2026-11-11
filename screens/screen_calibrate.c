@@ -20,6 +20,7 @@
 
 #include "screen_calibrate.h"
 #include "ui_screen_manager.h"
+#include "ui_chrome.h"
 #include "ui_widgets.h"
 #include "tft_interface.h"
 #include "tft_touch.h"
@@ -255,7 +256,7 @@ static void screen_update (void)
 
         case Cal_Done:
             if(lv_tick_elaps(t_mark) > DONE_MS)
-                ui_screen_manager_show(SCREEN_MAIN);
+                ui_screen_manager_show(SCREEN_HOME);
             break;
     }
 }

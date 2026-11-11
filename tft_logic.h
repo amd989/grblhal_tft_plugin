@@ -155,6 +155,72 @@ typedef struct {
 // The line of a tool measurement step (Cmd_Tls...), false if unknown
 bool tft_logic_tls_line(cmd_kind_t kind, const tft_tls_t *t, char *buf, size_t size);
 
+/*
+ * Jogging
+ */
+
+// Step sizes the step button cycles through, the last one is continuous:
+// jog while held
+#define TFT_STEP_COUNT  5
+#define TFT_STEP_CONT   (TFT_STEP_COUNT - 1)
+
+// Step after idx, or before it with dir < 0, wrapping around
+uint8_t tft_logic_step_next(uint8_t idx, int dir);
+
+// Step size in mm, 0 for continuous
+float tft_logic_step_mm(uint8_t idx);
+
+// Step value for the button: "0.1", "1", "10", "100" or "Cont."
+const char *tft_logic_step_text(uint8_t idx);
+
+// Relative jog by dx/dy/dz mm, leaving out the axes that do not move:
+// "$J=G91 G21 X1.000 Y-1.000 F1000". False if nothing moves.
+bool tft_logic_jog_line(char *buf, size_t size, float dx, float dy, float dz, int feed);
+
+// Set work zero for the axes in mask (bit 0 X, 1 Y, 2 Z): "G10 L20 P0 X0 Y0".
+// False for an empty mask.
+bool tft_logic_zero_line(char *buf, size_t size, uint8_t mask);
+
+/*
+ * Confirming a risky action (spindle on, Stop, Reset): either tap twice
+ * within TFT_CONFIRM_MS, or hold for TFT_HOLD_MS ($458).
+ */
+#define TFT_CONFIRM_MS  3000
+#define TFT_HOLD_MS     1000
+
+typedef enum {
+    Confirm_TapTwice = 0,
+    Confirm_Hold
+} tft_confirm_mode_t;
+
+typedef enum {
+    Confirm_Press,      // finger down
+    Confirm_Release,    // finger up, or lost
+    Confirm_Click       // a completed tap
+} tft_confirm_event_t;
+
+typedef struct {
+    tft_confirm_mode_t mode;
+    bool armed;         // tap twice: waiting for the second tap
+    bool pressing;      // hold: finger down, not fired yet
+    uint32_t since;     // ms when armed or pressed
+} tft_confirm_t;
+
+void tft_logic_confirm_init(tft_confirm_t *c, tft_confirm_mode_t mode);
+
+// Feed a touch event, true when the action should run now
+bool tft_logic_confirm_event(tft_confirm_t *c, tft_confirm_event_t event, uint32_t now);
+
+// Call periodically: true when a hold completes. Also disarms an unanswered
+// first tap after TFT_CONFIRM_MS.
+bool tft_logic_confirm_tick(tft_confirm_t *c, uint32_t now);
+
+// Hold progress 0-100 for the fill bar, 0 when not holding
+uint8_t tft_logic_confirm_progress(const tft_confirm_t *c, uint32_t now);
+
+// Cancel: not armed, not holding
+void tft_logic_confirm_cancel(tft_confirm_t *c);
+
 #ifdef __cplusplus
 }
 #endif

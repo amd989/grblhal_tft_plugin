@@ -434,6 +434,13 @@ void tft_jog_axis(uint8_t axis, float distance, float speed) {
     tft_send_command_fmt("$J=G91 G21 %c%.3f F%.0f", axis_letter, distance, speed);
 }
 
+void tft_jog(float dx, float dy, float dz, float speed) {
+    char line[TFT_CMD_MAX_LEN];
+
+    if(tft_logic_jog_line(line, sizeof(line), dx, dy, dz, (int)speed))
+        tft_send_command(line);
+}
+
 void tft_jog_cancel(void) {
     drop_chain = true;
     send_rt(CMD_JOG_CANCEL);
@@ -576,6 +583,13 @@ void tft_zero_axis(uint8_t axis) {
 
     char axis_letter = 'X' + axis;
     tft_send_command_fmt("G10 L20 P0 %c0\n", axis_letter);
+}
+
+void tft_zero_axes(uint8_t mask) {
+    char line[TFT_CMD_MAX_LEN];
+
+    if(tft_logic_zero_line(line, sizeof(line), mask))
+        tft_send_command(line);
 }
 
 void tft_zero_all(void) {

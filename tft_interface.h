@@ -59,6 +59,10 @@ void tft_send_command_fmt(const char *fmt, ...);
 // Jog a single axis
 void tft_jog_axis(uint8_t axis, float distance, float speed);
 
+// Jog X, Y and Z together by these distances (mm), for diagonal moves.
+// Axes with 0 do not move.
+void tft_jog(float dx, float dy, float dz, float speed);
+
 // Cancel active jog
 void tft_jog_cancel(void);
 
@@ -107,6 +111,9 @@ void tft_laser_test(bool on);
 
 // Zero a single axis work coordinate
 void tft_zero_axis(uint8_t axis);
+
+// Set work zero for the axes in mask (bit 0 X, 1 Y, 2 Z)
+void tft_zero_axes(uint8_t mask);
 
 // Zero all axes work coordinates
 void tft_zero_all(void);

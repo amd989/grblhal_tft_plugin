@@ -28,11 +28,11 @@ extern "C" {
 typedef enum {
     SCREEN_NONE = 0,
     SCREEN_SPLASH,          // Boot splash screen
-    SCREEN_MAIN,            // Main/Ready screen (position display)
-    SCREEN_CONTROL,         // Manual control (jog/home/zero)
+    SCREEN_MAIN,            // unused since the redesign, Jog is home
+    SCREEN_CONTROL,         // Jog, the home screen
     SCREEN_FILES,           // SD card file browser
     SCREEN_JOB,             // Job running screen
-    SCREEN_TOOL,            // Tool/settings menu
+    SCREEN_TOOL,            // Tools tab: spindle, screen settings, info
     SCREEN_WIFI,            // WiFi configuration
     SCREEN_POWER,           // Laser power adjustment
     SCREEN_FRAME,           // Border tracing
@@ -40,7 +40,7 @@ typedef enum {
     SCREEN_FILE_INFO,       // File information dialog
     SCREEN_CALIBRATE,       // Touch calibration
     SCREEN_MACROS,          // Macro buttons
-    SCREEN_SETTINGS,        // Brightness, beep, touch calibration, info
+    SCREEN_PROBE,           // Probe tab: touch plate, tool setter
     SCREEN_COUNT            // Total number of screens
 } ui_screen_t;
 

@@ -1,5 +1,6 @@
 /*
- * tft_settings.h - Screen settings: brightness ($456) and touch beep ($457)
+ * tft_settings.h - Screen settings: brightness ($456), touch beep ($457),
+ *                  confirm by tapping twice or holding ($458)
  *
  * Part of grblHAL TFT Plugin
  */
@@ -19,14 +20,17 @@ extern "C" {
 // Register the settings, from plugin init
 void tft_settings_init(void);
 
-// Brightness in percent and touch beep, including a change not saved yet
+// Brightness in percent, touch beep and confirm by holding ($458), including
+// a change not saved yet
 uint8_t tft_settings_brightness(void);
 bool tft_settings_beep(void);
+bool tft_settings_confirm_hold(void);
 
 // UI task: change a setting. grblHAL's loop stores it (tft_settings_poll),
 // grblHAL writes it to flash once the machine is idle.
 void tft_settings_set_brightness(uint8_t percent);
 void tft_settings_set_beep(bool on);
+void tft_settings_set_confirm_hold(bool on);
 
 // grblHAL loop (tft_interface.c)
 void tft_settings_poll(void);

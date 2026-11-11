@@ -29,6 +29,7 @@
 #include "ui_chrome.h"
 #include "ui_state.h"
 #include "ui_widgets.h"
+#include "ui_arrows.h"
 #include "tft_interface.h"
 
 #define UPDATE_MS       100
@@ -53,9 +54,6 @@ static const struct {
     { -1,  0, LV_SYMBOL_LEFT " X-" }, { 0, 0, NULL },     {  1,  0, "X+ " LV_SYMBOL_RIGHT },
     { -1, -1, NULL }, {  0, -1, "Y-\n" LV_SYMBOL_DOWN }, {  1, -1, NULL },
 };
-
-// Diagonal arrows drawn with lines in a 24x24 box, for up-right; the others mirror it
-static lv_point_t arrow_pts[4][2][3];
 
 static lv_obj_t *btn_pad[N_PAD], *btn_zup, *btn_zdown, *btn_step, *lbl_step_value, *lbl_step_unit;
 static lv_obj_t *btn_go_xy, *btn_go_z;
@@ -236,34 +234,15 @@ static void on_zero (lv_obj_t *obj, lv_event_t event)
  * Creation
  */
 
-static void arrows_init (void)
-{
-    // Up-right: shaft from the lower left corner to the tip, head at the tip
-    static const lv_point_t shaft[2] = { { 2, 22 }, { 22, 2 } };
-    static const lv_point_t head[3] = { { 10, 2 }, { 22, 2 }, { 22, 14 } };
-
-    for(uint_fast8_t d = 0; d < 4; d++) {
-        bool flip_x = d & 1, flip_y = d & 2;
-        for(uint_fast8_t i = 0; i < 3; i++) {
-            const lv_point_t *p = i < 2 ? &shaft[i] : &shaft[1];
-            arrow_pts[d][0][i].x = flip_x ? 24 - p->x : p->x;
-            arrow_pts[d][0][i].y = flip_y ? 24 - p->y : p->y;
-            arrow_pts[d][1][i].x = flip_x ? 24 - head[i].x : head[i].x;
-            arrow_pts[d][1][i].y = flip_y ? 24 - head[i].y : head[i].y;
-        }
-    }
-}
-
+// Diagonal chevron, an image colored like the button text (ui_arrows.c)
 static void add_arrow (lv_obj_t *btn, int8_t dx, int8_t dy)
 {
-    uint_fast8_t d = (dx < 0 ? 1 : 0) | (dy < 0 ? 2 : 0);
+    lv_obj_t *img = lv_img_create(btn, NULL);
 
-    for(uint_fast8_t part = 0; part < 2; part++) {
-        lv_obj_t *line = lv_line_create(btn, NULL);
-        lv_line_set_points(line, arrow_pts[d][part], part ? 3 : 2);
-        lv_obj_set_click(line, false);
-        lv_obj_align(line, NULL, LV_ALIGN_CENTER, 0, 0);
-    }
+    lv_img_set_src(img, dy > 0 ? (dx > 0 ? &ui_arrow_up_right : &ui_arrow_up_left)
+                               : (dx > 0 ? &ui_arrow_down_right : &ui_arrow_down_left));
+    lv_obj_set_click(img, false);
+    lv_obj_align(img, NULL, LV_ALIGN_CENTER, 0, 0);
 }
 
 static lv_obj_t *label_in (lv_obj_t *parent, const lv_font_t *font, lv_color_t color, const char *text)
@@ -298,7 +277,6 @@ static void zero_popup_create (lv_obj_t *parent)
 static void screen_create (lv_obj_t *parent)
 {
     lv_obj_set_style(parent, ui_widget_screen_style());
-    arrows_init();
 
     // Position cells
     for(uint_fast8_t idx = 0; idx < 3; idx++) {
@@ -360,8 +338,10 @@ static void screen_create (lv_obj_t *parent)
     btn_go_xy = ui_widget_create_button(parent, COL_X, PAD_Y + 99, COL_W, 45, "Go XY0", BUTTON_STYLE_PRIMARY, on_go);
     btn_go_z = ui_widget_create_button(parent, COL_X, PAD_Y + 148, COL_W, 46, "Go Z0", BUTTON_STYLE_PRIMARY, on_go);
 
-    ui_widget_create_styled_label(parent, UI_CONTENT_X, 300, ui_widget_text_style(UI_FONT_SMALL, UI_COLOR_TEXT_DIM),
-                                  "Tap a position to zero it. Step: tap for the next size, hold for the one before.");
+    lv_obj_t *hint = ui_widget_create_styled_label(parent, UI_CONTENT_X, 300, ui_widget_text_style(UI_FONT_SMALL, UI_COLOR_TEXT_DIM),
+                                                   "Tap a position to zero it. Hold Step to go back.");
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_DOT);    // never under the action bar
+    lv_obj_set_width(hint, UI_CONTENT_W);
 
     zero_popup_create(parent);
     last_update = 0;

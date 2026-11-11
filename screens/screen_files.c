@@ -3,10 +3,11 @@
  *
  * Part of grblHAL TFT Plugin
  *
- * Layout (content area, between the tabs and the action bar):
+ * Layout (right of the tabs, Files has no action bar):
  *   top     Up (parent folder, hidden at the root), folder name, Reload
  *   middle  five rows of folders and G-code files, page up/down on the right
- *   overlay confirm before running a file: Cancel, Frame, From line, Start
+ *   overlay confirm before running a file: Cancel, Frame, From line, Start.
+ *           Cancel becomes Stop while the machine moves (Frame).
  *   overlay pick the line to resume from, after a broken bit or a stop
  *
  * The card is read in grblHAL's loop (tft_sd.c); this screen requests a
@@ -32,11 +33,12 @@
 #define ROWS            5
 #define ROW_X           UI_CONTENT_X
 #define ROW_Y           86
-#define ROW_W           292
+#define ROW_W           352
 #define ROW_H           42
 #define ROW_PITCH       46
-#define PAGE_X          356
-#define PANEL_W         (UI_ACTION_X - UI_TABS_W)
+#define PAGE_X          418
+#define PAGE_W          58
+#define PANEL_W         (TFT_DISPLAY_WIDTH - UI_TABS_W)
 #define PANEL_H         (TFT_DISPLAY_HEIGHT - UI_STATUS_H)
 #define START_WAIT_MS   4000    // give up waiting for the job to start
 
@@ -44,6 +46,8 @@ static lv_style_t s_title, s_name, s_dim, s_msg, s_big;
 
 static lv_obj_t *lbl_title, *lbl_msg, *lbl_page, *btn_back, *btn_reload, *btn_up, *btn_down;
 static lv_obj_t *btn_row[ROWS], *lbl_row_name[ROWS], *lbl_row_size[ROWS];
+static lv_obj_t *lbl_cancel;
+static int8_t cancel_shown = -1;
 static lv_obj_t *confirm, *lbl_confirm_name, *lbl_confirm_info, *lbl_confirm_status, *btn_start, *btn_cancel, *btn_frame, *btn_from;
 static lv_obj_t *resume_panel, *lbl_resume_line, *lbl_resume_status, *btn_resume_back, *btn_resume_start;
 static lv_obj_t *btn_step[6];
@@ -336,7 +340,7 @@ static void resume_panel_create (lv_obj_t *parent)
     lv_obj_set_style(resume_panel, ui_widget_screen_style());
 
     ui_widget_create_styled_label(resume_panel, 8, 8, &s_title, "Resume from line");
-    lbl_resume_line = ui_widget_create_styled_label(resume_panel, 250, 2, &s_big, "1");
+    lbl_resume_line = ui_widget_create_styled_label(resume_panel, 300, 2, &s_big, "1");
 
     lv_obj_t *lbl = ui_widget_create_styled_label(resume_panel, 8, 40, &s_dim,
         "Goes up to Z home, over the start of the line, restores units, offset, "
@@ -347,13 +351,13 @@ static void resume_panel_create (lv_obj_t *parent)
     for(uint_fast8_t idx = 0; idx < 6; idx++) {
         char text[8];
         snprintf(text, sizeof(text), "%+d", line_step[idx]);
-        btn_step[idx] = ui_widget_create_button(resume_panel, 4 + idx * 58, 124, 54, 56, text, BUTTON_STYLE_DEFAULT, on_resume);
+        btn_step[idx] = ui_widget_create_button(resume_panel, 4 + idx * 70, 124, 66, 56, text, BUTTON_STYLE_DEFAULT, on_resume);
     }
 
     lbl_resume_status = ui_widget_create_styled_label(resume_panel, 8, 188, &s_title, "");
 
-    btn_resume_back = ui_widget_create_button(resume_panel, 4, 216, 170, 60, LV_SYMBOL_LEFT " Back", BUTTON_STYLE_DEFAULT, on_resume);
-    btn_resume_start = ui_widget_create_button(resume_panel, 182, 216, 170, 60, LV_SYMBOL_PLAY " Start", BUTTON_STYLE_SUCCESS, on_resume);
+    btn_resume_back = ui_widget_create_button(resume_panel, 4, 216, 206, 60, LV_SYMBOL_LEFT " Back", BUTTON_STYLE_DEFAULT, on_resume);
+    btn_resume_start = ui_widget_create_button(resume_panel, 214, 216, 206, 60, LV_SYMBOL_PLAY " Start", BUTTON_STYLE_SUCCESS, on_resume);
 
     lv_obj_set_hidden(resume_panel, true);
 }
@@ -373,11 +377,11 @@ static void screen_create (lv_obj_t *parent)
     lv_obj_set_style(parent, ui_widget_screen_style());
 
     btn_back = ui_widget_create_button(parent, UI_CONTENT_X, UI_CONTENT_Y, 64, 42, LV_SYMBOL_UP " Up", BUTTON_STYLE_DEFAULT, on_nav);
-    btn_reload = ui_widget_create_button(parent, PAGE_X, UI_CONTENT_Y, 50, 42, LV_SYMBOL_REFRESH, BUTTON_STYLE_DEFAULT, on_nav);
+    btn_reload = ui_widget_create_button(parent, PAGE_X, UI_CONTENT_Y, PAGE_W, 42, LV_SYMBOL_REFRESH, BUTTON_STYLE_DEFAULT, on_nav);
 
     lbl_title = ui_widget_create_styled_label(parent, UI_CONTENT_X + 72, UI_CONTENT_Y + 10, &s_title, "SD card");
     lv_label_set_long_mode(lbl_title, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(lbl_title, 210);
+    lv_obj_set_width(lbl_title, 270);
 
     for(uint_fast8_t idx = 0; idx < ROWS; idx++) {
         lv_obj_t *btn = lv_btn_create(parent, NULL);
@@ -389,7 +393,7 @@ static void screen_create (lv_obj_t *parent)
 
         lbl_row_name[idx] = create_label(btn, &s_name, "");
         lv_label_set_long_mode(lbl_row_name[idx], LV_LABEL_LONG_DOT);
-        lv_obj_set_width(lbl_row_name[idx], 196);
+        lv_obj_set_width(lbl_row_name[idx], 256);
         lv_obj_align(lbl_row_name[idx], NULL, LV_ALIGN_IN_LEFT_MID, 12, 0);
 
         lbl_row_size[idx] = create_label(btn, &s_dim, "");
@@ -398,13 +402,13 @@ static void screen_create (lv_obj_t *parent)
         btn_row[idx] = btn;
     }
 
-    btn_up = ui_widget_create_button(parent, PAGE_X, ROW_Y, 50, 100, LV_SYMBOL_UP, BUTTON_STYLE_DEFAULT, on_nav);
-    btn_down = ui_widget_create_button(parent, PAGE_X, ROW_Y + 5 * ROW_PITCH - 4 - 100, 50, 100, LV_SYMBOL_DOWN, BUTTON_STYLE_DEFAULT, on_nav);
+    btn_up = ui_widget_create_button(parent, PAGE_X, ROW_Y, PAGE_W, 100, LV_SYMBOL_UP, BUTTON_STYLE_DEFAULT, on_nav);
+    btn_down = ui_widget_create_button(parent, PAGE_X, ROW_Y + 5 * ROW_PITCH - 4 - 100, PAGE_W, 100, LV_SYMBOL_DOWN, BUTTON_STYLE_DEFAULT, on_nav);
     lbl_page = create_label(parent, &s_dim, "");
 
     lbl_msg = create_label(parent, &s_msg, "");
     lv_obj_set_auto_realign(lbl_msg, true);
-    lv_obj_align(lbl_msg, NULL, LV_ALIGN_CENTER, -32, 0);
+    lv_obj_align(lbl_msg, NULL, LV_ALIGN_CENTER, 0, 0);
 
     // Confirm overlay, covers and blocks the list (the tabs and action bar stay)
     confirm = lv_obj_create(parent, NULL);
@@ -426,10 +430,11 @@ static void screen_create (lv_obj_t *parent)
     lv_label_set_long_mode(lbl_confirm_status, LV_LABEL_LONG_BREAK);
     lv_obj_set_width(lbl_confirm_status, PANEL_W - 16);
 
-    btn_cancel = ui_widget_create_button(confirm, 4, 216, 82, 60, "Cancel", BUTTON_STYLE_DEFAULT, on_confirm);
-    btn_frame = ui_widget_create_button(confirm, 90, 216, 82, 60, "Frame", BUTTON_STYLE_PRIMARY, on_confirm);
-    btn_from = ui_widget_create_button(confirm, 176, 216, 82, 60, "From line", BUTTON_STYLE_DEFAULT, on_confirm);
-    btn_start = ui_widget_create_button(confirm, 262, 216, 90, 60, LV_SYMBOL_PLAY " Start", BUTTON_STYLE_SUCCESS, on_confirm);
+    btn_cancel = ui_widget_create_button(confirm, 4, 216, 100, 60, "Cancel", BUTTON_STYLE_DEFAULT, on_confirm);
+    lbl_cancel = lv_obj_get_child(btn_cancel, NULL);
+    btn_frame = ui_widget_create_button(confirm, 108, 216, 100, 60, "Frame", BUTTON_STYLE_PRIMARY, on_confirm);
+    btn_from = ui_widget_create_button(confirm, 212, 216, 100, 60, "From line", BUTTON_STYLE_DEFAULT, on_confirm);
+    btn_start = ui_widget_create_button(confirm, 316, 216, 104, 60, LV_SYMBOL_PLAY " Start", BUTTON_STYLE_SUCCESS, on_confirm);
 
     resume_panel_create(confirm);
 
@@ -440,6 +445,7 @@ static void screen_create (lv_obj_t *parent)
 
 static void screen_show (void)
 {
+    cancel_shown = -1;
     lv_obj_set_hidden(confirm, true);
     starting = preparing = false;
     request();      // also mounts a card inserted since the last visit
@@ -455,6 +461,16 @@ static void screen_update (void)
         // Keep the folder grblHAL actually listed
         strcpy(path, list->path);
         show_page();
+    }
+
+    // Hold and Reset are not on this screen: Cancel stops a moving machine
+    if(!lv_obj_get_hidden(confirm)) {
+        int8_t moving = !!(ui_state.system_state & (STATE_CYCLE|STATE_JOG));
+        if(moving != cancel_shown) {
+            cancel_shown = moving;
+            ui_widget_set_button_style(btn_cancel, moving ? BUTTON_STYLE_DANGER : BUTTON_STYLE_DEFAULT);
+            lv_label_set_text(lbl_cancel, moving ? LV_SYMBOL_STOP " Stop" : "Cancel");
+        }
     }
 
     if(framing) {

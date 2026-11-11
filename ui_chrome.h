@@ -7,7 +7,7 @@
  *   top     state, then the reason for an alarm, hold or tool change, or
  *           the position, then spindle and network badges
  *   left    tabs: Jog, Files, Probe, Macros, Tools
- *   right   Hold/Resume, Home, Unlock, Reset (confirmed)
+ *   right   Hold/Resume, Home, Unlock, Reset (confirmed), not on Files
  * The Job screen keeps only the status bar, so a job cannot be left from
  * the screen. Splash and touch calibration show none of it.
  * Runs in the UI task only.

@@ -242,7 +242,9 @@ void ui_chrome_set_screen (ui_screen_t s)
 
     lv_obj_set_hidden(status_bar, s == SCREEN_CALIBRATE || s == SCREEN_SPLASH);
     lv_obj_set_hidden(tab_bar, !tabbed);
-    lv_obj_set_hidden(action_bar, !tabbed);
+    // Files has the room instead: nothing moves there but Frame, and its
+    // panel turns Cancel into Stop while it does
+    lv_obj_set_hidden(action_bar, !tabbed || s == SCREEN_FILES);
 
     for(uint_fast8_t idx = 0; idx < N_TABS; idx++) {
         ui_button_style_t style = tabs[idx].screen == s ? BUTTON_STYLE_TAB_SELECTED : BUTTON_STYLE_TAB;

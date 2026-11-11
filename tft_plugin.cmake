@@ -28,6 +28,7 @@ list(APPEND SRCS
     ${TFT_PLUGIN_DIR}/ui_screen_manager.c
     ${TFT_PLUGIN_DIR}/ui_widgets.c
     ${TFT_PLUGIN_DIR}/ui_chrome.c
+    ${TFT_PLUGIN_DIR}/ui_arrows.c
     ${TFT_PLUGIN_DIR}/screens/screen_jog.c
     ${TFT_PLUGIN_DIR}/screens/screen_calibrate.c
     ${TFT_PLUGIN_DIR}/screens/screen_files.c

@@ -20,6 +20,7 @@
 #include "ui_chrome.h"
 #include "ui_screen_manager.h"
 #include "ui_widgets.h"
+#include "ui_icons.h"
 #include "tft_interface.h"
 
 #define UPDATE_MS   100
@@ -36,8 +37,8 @@ static const struct {
     { SCREEN_TOOL,    LV_SYMBOL_SETTINGS,  "Tools" },
 };
 
-static lv_style_t s_bar, s_pill[4];
-static lv_obj_t *status_bar, *pill, *lbl_pill, *lbl_mid, *btn_spindle, *lbl_net;
+static lv_style_t s_bar, s_pill[4], s_slash_gap, s_slash;
+static lv_obj_t *status_bar, *pill, *lbl_pill, *lbl_mid, *btn_spindle, *lbl_net, *img_slash_gap, *img_slash;
 static lv_obj_t *tab_bar, *btn_tab[N_TABS], *lbl_tab_icon[N_TABS];
 static lv_obj_t *action_bar, *btn_hold, *lbl_hold_icon, *lbl_hold, *btn_home, *btn_unlock;
 static ui_confirm_btn_t reset_btn;
@@ -200,6 +201,22 @@ void ui_chrome_init (void)
     lbl_net = ui_widget_create_styled_label(status_bar, 444, 8, ui_widget_text_style(UI_FONT_MEDIUM, UI_COLOR_TEXT), LV_SYMBOL_WIFI);
     lv_obj_set_hidden(lbl_net, true);
 
+    // Wi-Fi down: a slash across the gray symbol, with a gap cut around it
+    lv_style_copy(&s_slash_gap, &lv_style_plain);
+    s_slash_gap.image.color = UI_COLOR_SURFACE;
+    lv_style_copy(&s_slash, &s_slash_gap);
+    s_slash.image.color = UI_COLOR_TEXT_DIM;
+    img_slash_gap = lv_img_create(status_bar, NULL);
+    lv_img_set_src(img_slash_gap, &ui_slash_gap);
+    lv_img_set_style(img_slash_gap, LV_IMG_STYLE_MAIN, &s_slash_gap);
+    lv_obj_align(img_slash_gap, lbl_net, LV_ALIGN_CENTER, 0, 0);
+    img_slash = lv_img_create(status_bar, NULL);
+    lv_img_set_src(img_slash, &ui_slash);
+    lv_img_set_style(img_slash, LV_IMG_STYLE_MAIN, &s_slash);
+    lv_obj_align(img_slash, lbl_net, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_hidden(img_slash_gap, true);
+    lv_obj_set_hidden(img_slash, true);
+
     // Tabs
     tab_bar = lv_obj_create(top, NULL);
     lv_obj_set_style(tab_bar, &s_bar);
@@ -343,11 +360,14 @@ void ui_chrome_update (void)
         lv_obj_set_hidden(btn_spindle, !spindle);
     }
 
-    // Network: white when connected, dim when not, hidden without networking
+    // Network: white when connected, gray and struck through when not,
+    // hidden without networking
     int8_t net = !*ui_state.net_status ? 0 : strstr(ui_state.net_status, "not connected") ? 1 : 2;
     if(net != net_shown) {
         net_shown = net;
         lv_obj_set_hidden(lbl_net, net == 0);
+        lv_obj_set_hidden(img_slash_gap, net != 1);
+        lv_obj_set_hidden(img_slash, net != 1);
         lv_label_set_style(lbl_net, LV_LABEL_STYLE_MAIN, ui_widget_text_style(UI_FONT_MEDIUM, net == 2 ? UI_COLOR_TEXT : UI_COLOR_TEXT_DIM));
     }
 

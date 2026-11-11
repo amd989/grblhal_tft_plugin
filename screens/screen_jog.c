@@ -29,7 +29,7 @@
 #include "ui_chrome.h"
 #include "ui_state.h"
 #include "ui_widgets.h"
-#include "ui_arrows.h"
+#include "ui_icons.h"
 #include "tft_interface.h"
 
 #define UPDATE_MS       100
@@ -234,7 +234,7 @@ static void on_zero (lv_obj_t *obj, lv_event_t event)
  * Creation
  */
 
-// Diagonal chevron, an image colored like the button text (ui_arrows.c)
+// Diagonal chevron, an image colored like the button text (ui_icons.c)
 static void add_arrow (lv_obj_t *btn, int8_t dx, int8_t dy)
 {
     lv_obj_t *img = lv_img_create(btn, NULL);

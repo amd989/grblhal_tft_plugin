@@ -33,6 +33,9 @@
 
 #if WIFI_ENABLE || ETHERNET_ENABLE
 #include "networking/networking.h"
+#if WIFI_ENABLE
+#include "esp_wifi.h"
+#endif
 #define TFT_NET_STATUS 1
 #else
 #define TFT_NET_STATUS 0
@@ -109,14 +112,28 @@ static bool get_net_status (network_info_t *info, network_flags_t flags, void *d
 {
     char buf[sizeof(ui_state.net_status)];
     const char *name = info->is_ethernet ? "Ethernet" : info->wifi_mode == WiFiMode_AP ? "Wi-Fi AP" : "Wi-Fi";
+    bool up = info->link_up || flags.link_up || flags.ip_aquired || flags.ap_started;
 
-    if(info->link_up && *info->status.ip)
+#if WIFI_ENABLE
+    // The Wi-Fi driver always reports link_up false, and does not clear its
+    // flags when the station drops, so ask the radio
+    if(!info->is_ethernet && info->wifi_mode == WiFiMode_STA) {
+        wifi_ap_record_t ap;
+        up = esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+    }
+#endif
+
+    up = up && *info->status.ip;
+
+    if(up)
         snprintf(buf, sizeof(buf), "%s %s", name, info->status.ip);
     else
         snprintf(buf, sizeof(buf), "%s not connected", name);
 
     // Short strings, a torn read in the UI task only garbles one refresh
     strcpy(ui_state.net_status, buf);
+    strncpy(ui_state.net_ip, up ? info->status.ip : "", sizeof(ui_state.net_ip) - 1);
+    ui_state.net_link = up ? NET_LINK_UP : NET_LINK_DOWN;
     strncpy(ui_state.hostname, info->status.hostname, sizeof(ui_state.hostname) - 1);
 
     return true;

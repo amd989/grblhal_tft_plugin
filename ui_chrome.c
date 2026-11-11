@@ -316,8 +316,9 @@ static void middle_text (char *buf, size_t size, sys_state_t state, lv_color_t *
         snprintf(buf, size, "Feed hold, Resume to continue");
         *color = UI_COLOR_WARNING;
     } else if(screen == SCREEN_HOME) {
-        // Jog has its own large position, show the network instead
-        snprintf(buf, size, "%s", ui_state.net_status);
+        // Jog has its own large position, show the address instead. Nothing
+        // when the network is down, the struck Wi-Fi symbol says so.
+        snprintf(buf, size, "%s", ui_state.net_ip);
         *color = UI_COLOR_TEXT_DIM;
     } else {
         float *pos = ui_state.coord_mode == COORD_MODE_WORK ? ui_state.work_position : ui_state.machine_position;
@@ -378,13 +379,13 @@ void ui_chrome_update (void)
 
     // Network: white when connected, gray and struck through when not,
     // hidden without networking
-    int8_t net = !*ui_state.net_status ? 0 : strstr(ui_state.net_status, "not connected") ? 1 : 2;
+    int8_t net = ui_state.net_link;
     if(net != net_shown) {
         net_shown = net;
-        lv_obj_set_hidden(lbl_net, net == 0);
-        lv_obj_set_hidden(img_slash_gap, net != 1);
-        lv_obj_set_hidden(img_slash, net != 1);
-        lv_label_set_style(lbl_net, LV_LABEL_STYLE_MAIN, ui_widget_text_style(UI_FONT_MEDIUM, net == 2 ? UI_COLOR_TEXT : UI_COLOR_TEXT_DIM));
+        lv_obj_set_hidden(lbl_net, net == NET_LINK_NONE);
+        lv_obj_set_hidden(img_slash_gap, net != NET_LINK_DOWN);
+        lv_obj_set_hidden(img_slash, net != NET_LINK_DOWN);
+        lv_label_set_style(lbl_net, LV_LABEL_STYLE_MAIN, ui_widget_text_style(UI_FONT_MEDIUM, net == NET_LINK_UP ? UI_COLOR_TEXT : UI_COLOR_TEXT_DIM));
     }
 
     if(lv_obj_get_hidden(action_bar))

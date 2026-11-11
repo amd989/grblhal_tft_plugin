@@ -50,6 +50,13 @@ typedef enum {
     COORD_MODE_MACHINE      // Machine coordinates
 } coord_mode_t;
 
+// Network link, for the Wi-Fi symbol in the status bar
+enum {
+    NET_LINK_NONE = 0,      // no networking in the build
+    NET_LINK_DOWN,          // struck through
+    NET_LINK_UP
+};
+
 // UI state structure
 typedef struct {
     // Current screen
@@ -74,6 +81,8 @@ typedef struct {
     bool probe_triggered;           // Probe input active (plate touched)
     char net_status[40];            // "Wi-Fi 192.168.1.20", "" without networking
     char hostname[33];              // network hostname, "" without networking
+    char net_ip[16];                // "192.168.1.20" while connected, else ""
+    uint8_t net_link;               // NET_LINK_NONE, _DOWN or _UP
     bool host_connected;            // a sender is connected or polling, see tft_logic_host_active()
     bool laser_mode;                // $32=1 and the spindle is a PWM laser
     float spindle_max;              // $30, S for 100% laser power

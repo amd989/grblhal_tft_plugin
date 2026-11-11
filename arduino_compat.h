@@ -187,23 +187,39 @@ static inline void ledcWrite(uint8_t channel, uint32_t duty) {
     ledc_update_duty(LEDC_ARDUINO_MODE(channel), LEDC_ARDUINO_CHANNEL(channel));
 }
 
+#define MSBFIRST    1
+#define SPI_MODE0   0
+#define SPI_MODE1   1
+#define SPI_MODE2   2
+#define SPI_MODE3   3
+
+// Arduino SPISettings: only the clock is used, the TS35 runs MSB first, mode 0.
+class SPISettings {
+public:
+    SPISettings(uint32_t clock_hz = 1000000, uint8_t bit_order = MSBFIRST, uint8_t data_mode = SPI_MODE0)
+        : clock(clock_hz) { (void)bit_order; (void)data_mode; }
+    uint32_t clock;
+};
+
 // Minimal Arduino SPIClass on top of the ESP-IDF spi_master driver.
 // TFT_eSPI builds with its Generic processor here (ESP-IDF does not define
 // Arduino's ESP32 macro), which only needs begin(), setFrequency(),
-// transfer() and transfer16(). See arduino_spi.cpp.
+// transfer() and transfer16(). On a bus shared with the SD card it also calls
+// beginTransaction()/endTransaction(), which lock the bus. See arduino_spi.cpp.
 class SPIClass {
 public:
     void begin(int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1, int8_t ss = -1);
     void end(void);
     void setFrequency(uint32_t freq);
-    void beginTransaction(void*) {}
-    void endTransaction() {}
+    void beginTransaction(const SPISettings &settings);
+    void endTransaction(void);
     uint8_t transfer(uint8_t data);
     uint16_t transfer16(uint16_t data);
     void writeBytes(const uint8_t *data, uint32_t len);
 private:
     spi_device_handle_t dev = NULL;
     uint32_t freq_hz = 0;
+    bool held = false;      // bus acquired by this device
     bool add_device(void);
 };
 

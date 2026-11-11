@@ -15,6 +15,50 @@
 #include "my_machine.h"
 
 // ---------------------------------------------------------------------------
+// Board presets. MKS boards share an EXP1/EXP2 header layout, and the MKS TS35
+// plugs into it the same way on each (Marlin's MKS pinout): backlight EXP1_03,
+// reset EXP1_04, touch CS EXP1_05, display CS EXP1_07, DC EXP1_08, and SPI on
+// EXP2_01/02/06. Anything defined in my_machine.h wins.
+// ---------------------------------------------------------------------------
+
+#if defined(BOARD_MKS_TINYBEE_V1)
+
+// Stock grblHAL TinyBee map, no plugin board map needed: it leaves all of
+// these pins free. The SD card is on the same SPI bus (18/19/23, card CS 5),
+// so the display shares it with the card.
+#ifndef TFT_CS_PIN
+#define TFT_CS_PIN              15      // EXP1_07
+#endif
+#ifndef TFT_DC_PIN
+#define TFT_DC_PIN              17      // EXP1_08
+#endif
+#ifndef TFT_RST_PIN
+#define TFT_RST_PIN             4       // EXP1_04
+#endif
+#ifndef TFT_BL_PIN
+#define TFT_BL_PIN              21      // EXP1_03
+#endif
+#ifndef TOUCH_CS_PIN
+#define TOUCH_CS_PIN            0       // EXP1_05
+#endif
+#ifndef TFT_BEEP_PIN
+#define TFT_BEEP_PIN            I2SO(21) // EXP1_01, beeper on the third shift register
+#endif
+#ifndef TFT_BL_ACTIVE_LOW
+#define TFT_BL_ACTIVE_LOW       0
+#endif
+#if !defined(TFT_SPI_SHARED) && SDCARD_ENABLE
+#define TFT_SPI_SHARED          1
+#endif
+
+// UART1 (Modbus, MPG, UART keypad) is on GPIO 16/17, and 17 is the display DC.
+#if MODBUS_ENABLE || MPG_ENABLE || KEYPAD_ENABLE == 2
+#error "MKS TinyBee + TFT: UART1 (GPIO 16/17) is used by the display header. Disable Modbus, MPG and the UART keypad."
+#endif
+
+#endif // BOARD_MKS_TINYBEE_V1
+
+// ---------------------------------------------------------------------------
 // User settings. Defaults below match the MKS DLC32 v2.0/v2.1 with the MKS TS35
 // display. Override any of them by defining it in my_machine.h.
 // ---------------------------------------------------------------------------
@@ -156,6 +200,17 @@
 #ifndef USE_BOARD_V2_0
 #define USE_BOARD_V2_0          1
 #endif
+// Backlight output polarity. Low on the DLC32 v2.x, high where the header pin
+// drives the TS35 backlight directly.
+#ifndef TFT_BL_ACTIVE_LOW
+#define TFT_BL_ACTIVE_LOW       USE_BOARD_V2_0
+#endif
+// Display on the SPI bus grblHAL set up for the SD card (same SCK/MISO/MOSI),
+// instead of a bus of its own. Each display or touch transfer then locks the
+// bus, so the two never interleave.
+#ifndef TFT_SPI_SHARED
+#define TFT_SPI_SHARED          0
+#endif
 #ifndef USE_LCD_DMA
 #define USE_LCD_DMA             0       // TFT_eSPI DMA not wired up yet
 #endif
@@ -211,7 +266,8 @@
 #endif
 
 // Beeper output, a shift register bit on the DLC32. The plugin board map
-// leaves it free (the stock map used it for mist coolant).
+// leaves it free (the stock map used it for mist coolant). Boards without one
+// can set TFT_BEEP_ENABLE 0.
 #ifndef TFT_BEEP_PIN
 #define TFT_BEEP_PIN            I2SO(7)
 #endif
@@ -252,14 +308,7 @@ extern "C" {
 #define TFT_BACKLIGHT_BITS      TFT_BL_PWM_BITS
 #define TFT_BACKLIGHT_MAX       ((1 << TFT_BACKLIGHT_BITS) - 1)  // 1023 for 10-bit
 
-// Backlight polarity (board-specific)
-#if USE_BOARD_V2_0
-    #define TFT_BACKLIGHT_ON(duty)  ledcWrite(TFT_BACKLIGHT_CHANNEL, TFT_BACKLIGHT_MAX - (duty))
-    #define TFT_BACKLIGHT_OFF()     ledcWrite(TFT_BACKLIGHT_CHANNEL, TFT_BACKLIGHT_MAX)
-#else
-    #define TFT_BACKLIGHT_ON(duty)  ledcWrite(TFT_BACKLIGHT_CHANNEL, (duty))
-    #define TFT_BACKLIGHT_OFF()     ledcWrite(TFT_BACKLIGHT_CHANNEL, 0)
-#endif
+// Backlight polarity: TFT_BL_ACTIVE_LOW, applied in tft_set_backlight()
 
 // Touch Controller: XPT2046
 #define TFT_TOUCH_XPT2046       1

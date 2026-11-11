@@ -25,6 +25,7 @@ A touchscreen user interface for [grblHAL](https://github.com/grblHAL) on the ES
 - ESP32 running the [grblHAL ESP32 driver](https://github.com/grblHAL/ESP32)
 - ST7796 (or compatible) TFT display with an XPT2046 (or compatible) touch controller
 - Recommended: MKS DLC32 v2.0/v2.1 with the MKS TS35
+- Experimental, builds but not yet tested on hardware: MKS TinyBee v1.0 with the MKS TS35, see [Other boards](#other-boards)
 
 ## Quick start
 
@@ -67,6 +68,37 @@ From the root of the grblHAL ESP32 project (next to `platformio.ini`):
 Send `$I`: the list should include `[PLUGIN:TFT UI v0.3]`.
 
 Full steps and details: [Installation](https://github.com/amd989/grblhal_tft_plugin/wiki/Installation).
+
+## Other boards
+
+MKS boards share an EXP1/EXP2 header layout, and the TS35 plugs into it the same way on each: backlight EXP1_03, reset EXP1_04, touch CS EXP1_05, display CS EXP1_07, DC EXP1_08, SPI on EXP2. `tft_config.h` has a pin preset per supported board, picked from the board selected in `my_machine.h`. Any `TFT_*_PIN` defined in `my_machine.h` overrides the preset.
+
+### MKS TinyBee v1.0 (experimental)
+
+The stock grblHAL TinyBee map leaves the TS35 pins free, so no plugin board map is needed. Skip step 3 and use instead:
+
+```c
+#define BOARD_MKS_TINYBEE_V1
+#define TFT_ENABLE 1
+#define SDCARD_ENABLE 1     // optional
+```
+
+| Signal | GPIO | Header |
+|---|---|---|
+| Display CS | 15 | EXP1_07 |
+| Display DC | 17 | EXP1_08 |
+| Display reset | 4 | EXP1_04 |
+| Backlight | 21 | EXP1_03 |
+| Touch CS | 0 | EXP1_05 |
+| SCK / MISO / MOSI | 18 / 19 / 23 | EXP2, shared with the SD card |
+| Beeper | shift register bit 21 | EXP1_01 |
+
+Notes:
+
+- The display shares the SD card's SPI bus. With `SDCARD_ENABLE`, the plugin uses the bus grblHAL sets up and locks it around each display and touch transfer (`TFT_SPI_SHARED`).
+- UART1 is on GPIO 16/17, and 17 is the display DC, so Modbus, MPG and the UART keypad can't be used with the display. The build stops with an error if one is enabled.
+- The backlight is set active high (`TFT_BL_ACTIVE_LOW 0`). If the screen stays dark, try `#define TFT_BL_ACTIVE_LOW 1`.
+- Not yet tested on a TinyBee. Reports welcome.
 
 ## Tests
 

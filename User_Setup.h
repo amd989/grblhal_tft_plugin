@@ -1,4 +1,4 @@
-// TFT_eSPI User Setup for MKS DLC32 v2.0/v2.1
+// TFT_eSPI User Setup for the MKS TS35 (ST7796 + XPT2046)
 // This file overrides the default User_Setup.h in the TFT_eSPI submodule
 // Created for grblHAL TFT plugin
 
@@ -29,25 +29,30 @@
 #define LOAD_GFXFF
 
 // ##################################################################################
-// Hardware SPI pins for MKS DLC32
+// Pins and SPI clocks, from tft_config.h (DLC32 defaults, board presets, or
+// overrides in my_machine.h)
 // ##################################################################################
 
-#define TFT_MISO 19
-#define TFT_MOSI 23
-#define TFT_SCLK 18
-#define TFT_CS   25  // Chip select
-#define TFT_DC   33  // Data/Command (RS)
-#define TFT_RST  27  // Reset
+#include "tft_config.h"
 
-#define TOUCH_CS 26  // Touch controller chip select (XPT2046)
+#define TFT_MISO TFT_MISO_PIN
+#define TFT_MOSI TFT_MOSI_PIN
+#define TFT_SCLK TFT_SCLK_PIN
+#define TFT_CS   TFT_CS_PIN     // Chip select
+#define TFT_DC   TFT_DC_PIN     // Data/Command (RS)
+#define TFT_RST  TFT_RST_PIN    // Reset
 
-// ##################################################################################
-// SPI bus frequency
-// ##################################################################################
+#define TOUCH_CS TOUCH_CS_PIN   // Touch controller chip select (XPT2046)
 
-#define SPI_FREQUENCY       40000000    // 40 MHz for display
-#define SPI_READ_FREQUENCY  20000000    // 20 MHz for reads
-#define SPI_TOUCH_FREQUENCY  2000000    // 2 MHz for touch (XPT2046 requirement)
+#define SPI_FREQUENCY       TFT_SPI_FREQUENCY       // display writes
+#define SPI_READ_FREQUENCY  TFT_SPI_READ_FREQUENCY  // display reads
+#define SPI_TOUCH_FREQUENCY TOUCH_SPI_FREQUENCY     // XPT2046 limit
+
+// On a bus shared with the SD card, TFT_eSPI wraps every display and touch
+// access in SPI.beginTransaction()/endTransaction(), which lock the bus.
+#if TFT_SPI_SHARED
+#define SPI_HAS_TRANSACTION
+#endif
 
 // ##################################################################################
 // Optional features

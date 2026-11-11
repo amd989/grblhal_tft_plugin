@@ -64,7 +64,7 @@ From the root of the grblHAL ESP32 project (next to `platformio.ini`):
    pio run -t upload && pio device monitor
    ```
 
-Send `$I`: the list should include `[PLUGIN:TFT UI v0.2]`.
+Send `$I`: the list should include `[PLUGIN:TFT UI v0.3]`.
 
 Full steps and details: [Installation](https://github.com/amd989/grblhal_tft_plugin/wiki/Installation).
 

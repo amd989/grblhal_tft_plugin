@@ -23,6 +23,9 @@ extern const lv_img_dsc_t ui_arrow_up_right, ui_arrow_up_left, ui_arrow_down_rig
 // background color under the line
 extern const lv_img_dsc_t ui_slash_gap, ui_slash;
 
+// A host (PC) is talking to the machine, 22x18
+extern const lv_img_dsc_t ui_host;
+
 #ifdef __cplusplus
 }
 #endif

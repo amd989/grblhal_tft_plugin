@@ -68,6 +68,9 @@ static bool probe_done = true;          // the last probe sent has completed
 static bool toolsetter_selected = false;
 #endif
 static on_probe_completed_ptr on_probe_completed;
+static on_realtime_report_ptr on_realtime_report;
+static volatile uint32_t host_report_at;
+static volatile bool host_report_seen = false;
 static on_execute_realtime_ptr on_execute_realtime;
 static void laser_test_service(void);
 static float laser_s(float pct);
@@ -232,6 +235,8 @@ static void tft_poll (sys_state_t state)
         ui_state.tool = gc_state.tool ? gc_state.tool->tool_id : 0;
         ui_state.tool_pending = gc_state.tool_pending;
         ui_state.tc_mode = (uint8_t)settings.tool_change.mode;
+        ui_state.host_connected = tft_logic_host_active(hal.stream.type == StreamType_Telnet || hal.stream.type == StreamType_WebSocket,
+                                                        host_report_seen, host_report_at, hal.get_elapsed_ticks());
 
 #if TOOLSETTER_ENABLE
         read_toolsetter_state();
@@ -333,6 +338,17 @@ static void tft_probe_completed (void)
         on_probe_completed();
 }
 
+// Every status report is asked for by a host ('?'), unless reports are
+// automatic ($481): note when, for the host badge
+static void tft_realtime_report (stream_write_ptr stream_write, report_tracking_flags_t report)
+{
+    host_report_at = hal.get_elapsed_ticks();
+    host_report_seen = true;
+
+    if(on_realtime_report)
+        on_realtime_report(stream_write, report);
+}
+
 void tft_interface_init (void)
 {
     cmd_queue = xQueueCreate(TFT_CMD_QUEUE_LEN, sizeof(tft_cmd_t));
@@ -345,6 +361,9 @@ void tft_interface_init (void)
 
     on_probe_completed = grbl.on_probe_completed;
     grbl.on_probe_completed = tft_probe_completed;
+
+    on_realtime_report = grbl.on_realtime_report;
+    grbl.on_realtime_report = tft_realtime_report;
 }
 
 // Realtime commands (hold, resume, reset) are ISR safe in grblHAL.

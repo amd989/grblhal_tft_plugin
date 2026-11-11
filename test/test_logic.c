@@ -441,6 +441,16 @@ TEST(confirm_cancel_and_tick_wrap)
     CHECK(!tft_logic_confirm_event(&c, Confirm_Click, 20));
 }
 
+TEST(host_active)
+{
+    CHECK(!tft_logic_host_active(false, false, 0, 100000));     // never seen
+    CHECK(tft_logic_host_active(true, false, 0, 100000));       // WebUI or telnet
+    CHECK(tft_logic_host_active(false, true, 10000, 10250));    // polling
+    CHECK(tft_logic_host_active(false, true, 10000, 10000 + TFT_HOST_TIMEOUT_MS - 1));
+    CHECK(!tft_logic_host_active(false, true, 10000, 10000 + TFT_HOST_TIMEOUT_MS));  // gone quiet
+    CHECK(tft_logic_host_active(false, true, 0xFFFFFF00u, 0x00000100u));            // tick wrap
+}
+
 void test_logic_suite (void)
 {
     static const test_case_t tests[] = {
@@ -460,6 +470,7 @@ void test_logic_suite (void)
         TEST_CASE(resume_default_line),
         TEST_CASE(tool_change_text),
         TEST_CASE(brightness_limits),
+        TEST_CASE(host_active),
         TEST_CASE(probe_z_steps),
         TEST_CASE(probe_z_respects_max),
         TEST_CASE(frame_as_jogs),

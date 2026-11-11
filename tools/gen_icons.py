@@ -65,6 +65,10 @@ slash = [((2.5, 1.5), (19.5, 18.5))]
 slash_gap = render(22, 20, slash, 5.5)
 slash_line = render(22, 20, slash, 2.2)
 
+# Host (a PC talking to the machine): a monitor on a stand, 22x18
+host = render(22, 18, [((2.5, 1.5), (18.5, 1.5)), ((18.5, 1.5), (18.5, 11.5)), ((18.5, 11.5), (2.5, 11.5)),
+                       ((2.5, 11.5), (2.5, 1.5)), ((10.5, 12.5), (10.5, 15)), ((6, 15.5), (15, 15.5))], 2.0)
+
 images = [
     ('ui_arrow_up_right', chevron),
     ('ui_arrow_up_left', flip(chevron, True, False)),
@@ -72,6 +76,7 @@ images = [
     ('ui_arrow_down_left', flip(chevron, True, True)),
     ('ui_slash_gap', slash_gap),
     ('ui_slash', slash_line),
+    ('ui_host', host),
 ]
 
 header = '''/*

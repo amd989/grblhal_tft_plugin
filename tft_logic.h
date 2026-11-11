@@ -118,6 +118,16 @@ void tft_logic_format_tool_change(char *buf, size_t size, int32_t tool, bool set
 uint8_t tft_logic_brightness(int value);
 
 /*
+ * Host connection, for the status bar badge. A network client (WebUI,
+ * telnet) has the command stream while connected. Over USB there is no
+ * connection signal, but senders ask for status several times a second:
+ * a host counts as connected until TFT_HOST_TIMEOUT_MS after the last one.
+ */
+#define TFT_HOST_TIMEOUT_MS 3000
+
+bool tft_logic_host_active(bool network_stream, bool report_seen, uint32_t last_report, uint32_t now);
+
+/*
  * Command lines
  */
 

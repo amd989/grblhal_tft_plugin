@@ -185,6 +185,11 @@ uint8_t tft_logic_brightness (int value)
     return value < 10 ? 10 : value > 100 ? 100 : (uint8_t)value;
 }
 
+bool tft_logic_host_active (bool network_stream, bool report_seen, uint32_t last_report, uint32_t now)
+{
+    return network_stream || (report_seen && now - last_report < TFT_HOST_TIMEOUT_MS);
+}
+
 /*
  * Command lines
  */

@@ -74,6 +74,7 @@ typedef struct {
     bool probe_triggered;           // Probe input active (plate touched)
     char net_status[40];            // "Wi-Fi 192.168.1.20", "" without networking
     char hostname[33];              // network hostname, "" without networking
+    bool host_connected;            // a sender is connected or polling, see tft_logic_host_active()
     bool laser_mode;                // $32=1 and the spindle is a PWM laser
     float spindle_max;              // $30, S for 100% laser power
     bool z_homed;                   // Z homed: tool measurement and resume move to the Z home position

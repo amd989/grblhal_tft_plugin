@@ -4,7 +4,7 @@
  * Part of grblHAL TFT Plugin
  *
  * See ui_chrome.h. Layout (480x320):
- *   status bar  y 0-36: state pill, reason or position, spindle and Wi-Fi
+ *   status bar  y 0-36: state pill, reason or position, spindle, host and Wi-Fi
  *   tabs        x 0-56, five of 56 px
  *   action bar  x 412-476: Hold/Resume 112 px tall, Home, Unlock, Reset
  */
@@ -37,8 +37,8 @@ static const struct {
     { SCREEN_TOOL,    LV_SYMBOL_SETTINGS,  "Tools" },
 };
 
-static lv_style_t s_bar, s_pill[4], s_slash_gap, s_slash;
-static lv_obj_t *status_bar, *pill, *lbl_pill, *lbl_mid, *btn_spindle, *lbl_net, *img_slash_gap, *img_slash;
+static lv_style_t s_bar, s_pill[4], s_slash_gap, s_slash, s_host;
+static lv_obj_t *status_bar, *pill, *lbl_pill, *lbl_mid, *btn_spindle, *lbl_net, *img_slash_gap, *img_slash, *img_host;
 static lv_obj_t *tab_bar, *btn_tab[N_TABS], *lbl_tab_icon[N_TABS];
 static lv_obj_t *action_bar, *btn_hold, *lbl_hold_icon, *lbl_hold, *btn_home, *btn_unlock;
 static ui_confirm_btn_t reset_btn;
@@ -46,7 +46,7 @@ static ui_confirm_btn_t reset_btn;
 static ui_screen_t screen = SCREEN_NONE;
 static uint32_t last_update;
 static char txt_pill[24], txt_mid[64];
-static int8_t pill_shown = -1, hold_shown = -1, unlock_shown = -1, spindle_shown = -1, net_shown = -1;
+static int8_t pill_shown = -1, hold_shown = -1, unlock_shown = -1, spindle_shown = -1, net_shown = -1, host_shown = -1;
 
 static bool tab_screen (ui_screen_t s)
 {
@@ -193,9 +193,9 @@ void ui_chrome_init (void)
 
     lbl_mid = ui_widget_create_styled_label(status_bar, 116, 10, ui_widget_text_style(UI_FONT_MEDIUM, UI_COLOR_TEXT), "");
     lv_label_set_long_mode(lbl_mid, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(lbl_mid, 268);
+    lv_obj_set_width(lbl_mid, 262);
 
-    btn_spindle = ui_widget_create_button(status_bar, 388, 4, 36, 28, LV_SYMBOL_REFRESH, BUTTON_STYLE_SUCCESS, on_action);
+    btn_spindle = ui_widget_create_button(status_bar, 382, 4, 34, 28, LV_SYMBOL_REFRESH, BUTTON_STYLE_SUCCESS, on_action);
     lv_obj_set_hidden(btn_spindle, true);
 
     lbl_net = ui_widget_create_styled_label(status_bar, 444, 8, ui_widget_text_style(UI_FONT_MEDIUM, UI_COLOR_TEXT), LV_SYMBOL_WIFI);
@@ -216,6 +216,15 @@ void ui_chrome_init (void)
     lv_obj_align(img_slash, lbl_net, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_hidden(img_slash_gap, true);
     lv_obj_set_hidden(img_slash, true);
+
+    // Host: a PC is talking to the machine (see tft_logic_host_active())
+    lv_style_copy(&s_host, &lv_style_plain);
+    s_host.image.color = UI_COLOR_TEXT;
+    img_host = lv_img_create(status_bar, NULL);
+    lv_img_set_src(img_host, &ui_host);
+    lv_img_set_style(img_host, LV_IMG_STYLE_MAIN, &s_host);
+    lv_obj_set_pos(img_host, 420, 9);
+    lv_obj_set_hidden(img_host, true);
 
     // Tabs
     tab_bar = lv_obj_create(top, NULL);
@@ -358,6 +367,13 @@ void ui_chrome_update (void)
     if(spindle != spindle_shown) {
         spindle_shown = spindle;
         lv_obj_set_hidden(btn_spindle, !spindle);
+    }
+
+    // Host connected or polling
+    int8_t host = ui_state.host_connected;
+    if(host != host_shown) {
+        host_shown = host;
+        lv_obj_set_hidden(img_host, !host);
     }
 
     // Network: white when connected, gray and struck through when not,

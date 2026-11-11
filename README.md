@@ -66,6 +66,16 @@ Send `$I`: the list should include `[PLUGIN:TFT UI v0.2]`.
 
 Full steps and details: [Installation](https://github.com/amd989/grblhal_tft_plugin/wiki/Installation).
 
+## Tests
+
+The logic that does not need the board (G-code reading for Frame and resume from line, macros, job progress, the command lines it sends) lives in `tft_gcode.c` and `tft_logic.c`, with no grblHAL or LVGL calls. Its tests build and run on a PC with gcc or clang:
+
+```sh
+./test/run.sh
+```
+
+They also run on every push, see `.github/workflows/tests.yml`. Details in [Development](https://github.com/amd989/grblhal_tft_plugin/wiki/Development#tests).
+
 ## Wiki
 
 - [Installation](https://github.com/amd989/grblhal_tft_plugin/wiki/Installation)

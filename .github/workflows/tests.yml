@@ -1,0 +1,16 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  logic:
+    name: Logic tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run with gcc
+        run: ./test/run.sh
+      - name: Build and run with clang
+        run: CC=clang ./test/run.sh
